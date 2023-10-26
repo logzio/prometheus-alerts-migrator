@@ -88,13 +88,13 @@ func main() {
 
 	kubeInformerFactory := kubeinformers.NewSharedInformerFactory(kubeClient, time.Second*30)
 
-	controller := controller.NewController(kubeClient, kubeInformerFactory.Core().V1().ConfigMaps(), configmapAnnotation, reloadEndpoint, rulesPath)
+	c := controller.NewController(kubeClient, kubeInformerFactory.Core().V1().ConfigMaps(), configmapAnnotation, reloadEndpoint, rulesPath)
 
 	// notice that there is no need to run Start methods in a separate goroutine. (i.e. go kubeInformerFactory.Start(stopCh)
 	// Start method is non-blocking and runs all registered informers in a dedicated goroutine.
 	kubeInformerFactory.Start(stopCh)
 
-	if err = controller.Run(2, stopCh); err != nil {
+	if err = c.Run(2, stopCh); err != nil {
 		klog.Fatalf("Error running controller: %s", err.Error())
 	}
 }
