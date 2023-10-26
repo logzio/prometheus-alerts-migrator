@@ -5,9 +5,12 @@ import (
 	"github.com/logzio/prometheus-alerts-migrator/controller"
 	"github.com/logzio/prometheus-alerts-migrator/pkg/signals"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/util/homedir"
 	"k8s.io/klog"
 	"log"
 	"os"
+	"path/filepath"
 	"time"
 
 	"k8s.io/client-go/tools/clientcmd"
@@ -39,6 +42,26 @@ const (
 	podSubdomain = "pod"
 )
 
+// GetConfig returns a Kubernetes config
+func GetConfig() (*rest.Config, error) {
+	var config *rest.Config
+
+	kubeconfig := filepath.Join(homedir.HomeDir(), ".kube", "config")
+	if _, err := os.Stat(kubeconfig); err == nil {
+		config, err = clientcmd.BuildConfigFromFlags("", kubeconfig)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		config, err = rest.InClusterConfig()
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return config, nil
+}
+
 func main() {
 	flag.Parse()
 
@@ -57,9 +80,9 @@ func main() {
 	// set up signals so we handle the first shutdown signal gracefully
 	stopCh := signals.SetupSignalHandler()
 
-	cfg, err := clientcmd.BuildConfigFromFlags(*masterURL, *kubeconfigPath)
+	cfg, err := GetConfig()
 	if err != nil {
-		log.Fatalf("Error building kubeconfig: %s\n", err.Error())
+		log.Fatalf("Error getting Kubernetes config")
 	}
 
 	kubeClient, err := kubernetes.NewForConfig(cfg)
