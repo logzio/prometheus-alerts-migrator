@@ -8,7 +8,6 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/util/homedir"
 	"k8s.io/klog"
-	"log"
 	"os"
 	"path/filepath"
 	"time"
@@ -25,9 +24,6 @@ var (
 	rulesPath           = flag.String("rulespath", "/rules", "Filepath where the rules from the configmap file should be written, this should correspond to a rule_files: location in your prometheus config.")
 	reloadEndpoint      = flag.String("endpoint", "http://localhost:9090/-/reload/", "Endpoint of the Prometheus reset endpoint (eg: http://prometheus:9090/-/reload).")
 	batchTime           = flag.Int("batchtime", 5, "Time window to batch updates (in seconds, default: 5)")
-	// flags - kubeclient
-	kubeconfigPath = flag.String("kubeconfig", "", "Path to kubeconfig. Required for out of cluster operation.")
-	masterURL      = flag.String("master", "", "The address of the kube api server. Overrides the kubeconfig value, only require for off cluster operation.")
 
 	clientset *kubernetes.Clientset
 	lastSha   string
@@ -73,16 +69,16 @@ func main() {
 		os.Exit(1)
 	}
 
-	log.Printf("Rule Updater starting.\n")
-	log.Printf("ConfigMap annotation: %s\n", *configmapAnnotation)
-	log.Printf("Rules location: %s\n", *rulesPath)
+	klog.Info("Rule Updater starting.\n")
+	klog.Infof("ConfigMap annotation: %s\n", *configmapAnnotation)
+	klog.Infof("Rules location: %s\n", *rulesPath)
 
 	// set up signals so we handle the first shutdown signal gracefully
 	stopCh := signals.SetupSignalHandler()
 
 	cfg, err := GetConfig()
 	if err != nil {
-		log.Fatalf("Error getting Kubernetes config")
+		klog.Fatalf("Error getting Kubernetes config")
 	}
 
 	kubeClient, err := kubernetes.NewForConfig(cfg)
