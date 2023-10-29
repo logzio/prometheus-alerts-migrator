@@ -20,7 +20,7 @@ import (
 var (
 	// flags general
 	helpFlag            = flag.Bool("help", false, "")
-	configmapAnnotation = flag.String("annotation", "nordstrom.net/prometheus2Alerts", "Annotation that states that this configmap contains prometheus rules.")
+	configmapAnnotation = flag.String("annotation", "prometheus.io/kube-rules", "Annotation that states that this configmap contains prometheus rules.")
 	rulesPath           = flag.String("rulespath", "/rules", "Filepath where the rules from the configmap file should be written, this should correspond to a rule_files: location in your prometheus config.")
 	reloadEndpoint      = flag.String("endpoint", "http://localhost:9090/-/reload/", "Endpoint of the Prometheus reset endpoint (eg: http://prometheus:9090/-/reload).")
 	batchTime           = flag.Int("batchtime", 5, "Time window to batch updates (in seconds, default: 5)")
