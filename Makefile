@@ -1,7 +1,7 @@
 app_name := prometheusAlertsMigrator
 container_name := prometheusAlertsMigrator
 container_registry := logzio/prometheusAlertsMigrator
-container_release := 5.1
+container_release := 0.0.1
 
 .PHONY: build tag/image push/image clean
 
