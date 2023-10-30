@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	_ "github.com/prometheus/prometheus/promql/parser"
-	"gopkg.in/matryer/try.v1"
 	"gopkg.in/yaml.v3"
 	"io/ioutil"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -266,9 +265,6 @@ func (c *Controller) syncHandler(key string) error {
 
 			// TODO: write delta CRUD
 
-			// reload
-			c.tryConfigReload()
-
 		}
 
 	}
@@ -416,18 +412,6 @@ func (c *Controller) saltRuleGroupNames(rgs *rulefmt.RuleGroups) *rulefmt.RuleGr
 		usedNames[rgs.Groups[i].Name] = "yes"
 	}
 	return rgs
-}
-
-func (c *Controller) tryConfigReload() {
-	_ = try.Do(func(attempt int) (bool, error) {
-		err := c.configReload(*c.reloadEndpoint)
-		if err != nil {
-			klog.Error(err)
-			time.Sleep(10 * time.Second)
-			return false, err
-		}
-		return true, nil
-	})
 }
 
 func (c *Controller) configReload(url string) error {
