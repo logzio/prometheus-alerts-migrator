@@ -3,6 +3,8 @@ package controller
 import (
 	"context"
 	"fmt"
+	"github.com/logzio/logzio_terraform_client/grafana_alerts"
+	"github.com/prometheus/prometheus/model/rulefmt"
 	_ "github.com/prometheus/prometheus/promql/parser"
 	"gopkg.in/yaml.v3"
 	"io/ioutil"
@@ -17,8 +19,6 @@ import (
 	"math/rand"
 	"net/http"
 	"time"
-
-	"github.com/prometheus/prometheus/model/rulefmt"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -56,6 +56,8 @@ type Controller struct {
 	// Kubernetes API.
 	recorder record.EventRecorder
 
+	logzioClient *grafana_alerts.GrafanaAlertClient
+
 	resourceVersionMap         map[string]string
 	interestingAnnotation      *string
 	reloadEndpoint             *string
@@ -74,6 +76,8 @@ func NewController(
 	interestingAnnotation *string,
 	reloadEndpoint *string,
 	rulesPath *string,
+	logzioApiToken string,
+	logzioApiUrl string,
 ) *Controller {
 
 	utilruntime.Must(scheme.AddToScheme(scheme.Scheme))
@@ -84,11 +88,12 @@ func NewController(
 	recorder := eventBroadcaster.NewRecorder(scheme.Scheme, corev1.EventSource{Component: controllerAgentName})
 
 	rsource := rand.NewSource(time.Now().UnixNano())
-
+	logzioClient, _ := grafana_alerts.New(logzioApiToken, logzioApiUrl)
 	controller := &Controller{
-		kubeclientset:         kubeclientset,
-		configmapsLister:      configmapInformer.Lister(),
-		configmapsSynced:      configmapInformer.Informer().HasSynced,
+		kubeclientset:    kubeclientset,
+		configmapsLister: configmapInformer.Lister(),
+		configmapsSynced: configmapInformer.Informer().HasSynced,
+		// TODO: update to newer version
 		workqueue:             workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "configmaps"),
 		recorder:              recorder,
 		interestingAnnotation: interestingAnnotation,
@@ -96,6 +101,7 @@ func NewController(
 		rulesPath:             rulesPath,
 		randSrc:               &rsource,
 		resourceVersionMap:    make(map[string]string),
+		logzioClient:          logzioClient,
 	}
 
 	// is this idomatic?
@@ -258,9 +264,15 @@ func (c *Controller) syncHandler(key string) error {
 				utilruntime.HandleError(err)
 				return nil
 			}
-			klog.Info(rules)
+			if rules == nil {
+				klog.Info("empty")
+			}
 			// TODO: list rules from logz.io alerts
-
+			alertRules, err := c.logzioClient.ListGrafanaAlertRules()
+			if err != nil {
+				return err
+			}
+			klog.Info(alertRules)
 			// TODO: compare rules against rules in logz.io alerts
 
 			// TODO: write delta CRUD
