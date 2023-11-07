@@ -2,12 +2,14 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/logzio/logzio_terraform_client/grafana_alerts"
+	"github.com/logzio/logzio_terraform_client/grafana_folders"
 	"github.com/prometheus/prometheus/model/rulefmt"
 	_ "github.com/prometheus/prometheus/promql/parser"
 	"gopkg.in/yaml.v3"
-	"io/ioutil"
+	"io"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
@@ -16,8 +18,8 @@ import (
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
-	"math/rand"
 	"net/http"
+	"os"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -29,6 +31,7 @@ import (
 )
 
 const (
+	alertFolder         = "prometheus-alerts"
 	controllerAgentName = "logzio-prometheus-alerts-migrator-controller"
 	ErrInvalidKey       = "InvalidKey"
 	ValidKey            = "ValidKey"
@@ -37,6 +40,22 @@ const (
 	letterIdxMask       = 1<<letterIdxBits - 1 // All 1-bits, as many as letterIdxBits
 	letterIdxMax        = 63 / letterIdxBits   // # of letter indices fitting in 63 bits
 )
+
+// PrometheusQuery represents a Prometheus query.
+type PrometheusQuery struct {
+	Expr  string `json:"expr"`
+	Hide  bool   `json:"hide"`
+	RefId string `json:"refId"`
+}
+
+// ToJSON marshals the Query into a JSON byte slice
+func (p PrometheusQuery) ToJSON() (json.RawMessage, error) {
+	marshaled, err := json.Marshal(p)
+	if err != nil {
+		return nil, err
+	}
+	return marshaled, nil
+}
 
 // Controller is the controller implementation for Foo resources
 type Controller struct {
@@ -56,13 +75,15 @@ type Controller struct {
 	// Kubernetes API.
 	recorder record.EventRecorder
 
-	logzioClient *grafana_alerts.GrafanaAlertClient
+	logzioAlertClient  *grafana_alerts.GrafanaAlertClient
+	logzioFolderClient *grafana_folders.GrafanaFolderClient
+	rulesDataSource    string
+	envId              string
 
 	resourceVersionMap         map[string]string
 	interestingAnnotation      *string
 	reloadEndpoint             *string
 	rulesPath                  *string
-	randSrc                    *rand.Source
 	configmapEventRecorderFunc func(cm *corev1.ConfigMap, eventtype, reason, msg string)
 }
 
@@ -87,21 +108,24 @@ func NewController(
 	eventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: kubeclientset.CoreV1().Events("")})
 	recorder := eventBroadcaster.NewRecorder(scheme.Scheme, corev1.EventSource{Component: controllerAgentName})
 
-	rsource := rand.NewSource(time.Now().UnixNano())
-	logzioClient, _ := grafana_alerts.New(logzioApiToken, logzioApiUrl)
+	// TODO: Handle errors
+	logzioAlertClient, _ := grafana_alerts.New(logzioApiToken, logzioApiUrl)
+	logzioFolderClient, _ := grafana_folders.New(logzioApiToken, logzioApiUrl)
+
 	controller := &Controller{
-		kubeclientset:    kubeclientset,
-		configmapsLister: configmapInformer.Lister(),
-		configmapsSynced: configmapInformer.Informer().HasSynced,
-		// TODO: update to newer version
-		workqueue:             workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "configmaps"),
+		kubeclientset:         kubeclientset,
+		configmapsLister:      configmapInformer.Lister(),
+		configmapsSynced:      configmapInformer.Informer().HasSynced,
+		workqueue:             workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter()),
 		recorder:              recorder,
 		interestingAnnotation: interestingAnnotation,
 		reloadEndpoint:        reloadEndpoint,
 		rulesPath:             rulesPath,
-		randSrc:               &rsource,
 		resourceVersionMap:    make(map[string]string),
-		logzioClient:          logzioClient,
+		logzioAlertClient:     logzioAlertClient,
+		logzioFolderClient:    logzioFolderClient,
+		// TODO: get the value in main.go
+		rulesDataSource: os.Getenv("RULES_DS"),
 	}
 
 	// is this idomatic?
@@ -234,53 +258,94 @@ func (c *Controller) syncHandler(key string) error {
 		}
 	}
 
-	// current implimentation
-	// 1. some configmap changed...
-	// 1b. If it was nil (deleted) we have no choice but to rebuild skip to 2d1.
-	// 2. does configmap have annotation
-	// 2b. Get all configmaps clusterwide filter on annotation
-	// 2c. Check each cm resource version against a lookup table
-	// 2d. if there are any misses
-	// 2d1. rebuild config
-
 	// I don't love this bypass
 	bypassCheck := false
-
 	if configmap == nil {
 		// deleted
 		bypassCheck = true
 	}
 
 	if c.isRuleConfigMap(configmap) || bypassCheck {
-		mapList, err := c.kubeclientset.CoreV1().ConfigMaps(corev1.NamespaceAll).List(context.Background(), metav1.ListOptions{})
-		if err != nil {
+		mapList, cmListErr := c.kubeclientset.CoreV1().ConfigMaps(corev1.NamespaceAll).List(context.Background(), metav1.ListOptions{})
+		if cmListErr != nil {
 			utilruntime.HandleError(fmt.Errorf("unable to collect configmaps from the cluster; %s", err))
 			return nil
 		}
 
 		if c.haveConfigMapsChanged(mapList) || bypassCheck {
-			rules := c.buildFinalConfig(mapList)
+			// Find All alerts from configmaps
+			alertRules := c.buildFinalConfig(mapList)
 			if err != nil {
 				utilruntime.HandleError(err)
 				return nil
 			}
-			if rules == nil {
-				klog.Info("empty")
+			// Find prometheus alerts folder uid
+			folderUid, findFolderErr := c.findOrCreatePrometheusAlertsFolder()
+			if findFolderErr != nil {
+				utilruntime.HandleError(findFolderErr)
+				return findFolderErr
 			}
-			// TODO: list rules from logz.io alerts
-			alertRules, err := c.logzioClient.ListGrafanaAlertRules()
-			if err != nil {
-				return err
+			// Get all logzio rules inside "prometheus-alerts" folder
+			logzioAlertRules, ListLogzioRulesErr := c.getLogzioPrometheusAlerts(folderUid)
+			if ListLogzioRulesErr != nil {
+				utilruntime.HandleError(ListLogzioRulesErr)
+				return ListLogzioRulesErr
 			}
-			klog.Info(alertRules)
-			// TODO: compare rules against rules in logz.io alerts
-
-			// TODO: write delta CRUD
-
+			// Compare alerts from configmaps with logzio rules inside "prometheus-alerts" folder
+			toAdd, toUpdate, toDelete := c.compareAlertRules(alertRules, logzioAlertRules)
+			klog.Infof("toAdd: %d, toUpdate: %d, toDelete: %d", toAdd, toUpdate, toDelete)
+			// TODO: handle crud
 		}
 
 	}
 
+	return nil
+}
+
+func (c *Controller) writeRule(rule rulefmt.RuleNode, folderUid string) error {
+	// Create an instance of the Prometheus query.
+	query := PrometheusQuery{
+		Expr:  rule.Expr.Value,
+		Hide:  false,
+		RefId: "A",
+	}
+	// Use the ToJSON method to marshal the Query struct.
+	model, err := query.ToJSON()
+	if err != nil {
+		return err
+	}
+	data := grafana_alerts.GrafanaAlertQuery{
+		DatasourceUid: c.rulesDataSource,
+		Model:         model,
+		RefId:         "A",
+		QueryType:     "query",
+		RelativeTimeRange: grafana_alerts.RelativeTimeRangeObj{
+			From: 300,
+			To:   0,
+		},
+	}
+	duration, err := parseDuration(rule.For.String())
+	if err != nil {
+		return err
+	}
+	createGrafanaAlert := grafana_alerts.GrafanaAlertRule{
+		Annotations:  rule.Annotations,
+		Condition:    "A",
+		Data:         []*grafana_alerts.GrafanaAlertQuery{&data},
+		FolderUID:    folderUid,
+		NoDataState:  grafana_alerts.NoDataOk,
+		ExecErrState: grafana_alerts.ErrOK,
+		Labels:       rule.Labels,
+		OrgID:        1,
+		RuleGroup:    rule.Alert.Value,
+		Title:        rule.Alert.Value,
+		For:          duration,
+	}
+	newAlert, writeRuleErr := c.logzioAlertClient.CreateGrafanaAlertRule(createGrafanaAlert)
+	klog.Info(newAlert)
+	if writeRuleErr != nil {
+		utilruntime.HandleError(writeRuleErr)
+	}
 	return nil
 }
 
@@ -308,10 +373,46 @@ func (c *Controller) buildFinalConfig(mapList *corev1.ConfigMapList) *[]rulefmt.
 	}
 	return &finalRules
 }
+func (c *Controller) getLogzioPrometheusAlerts(folderUid string) (*[]grafana_alerts.GrafanaAlertRule, error) {
+	alertRules, ListLogzioRulesErr := c.logzioAlertClient.ListGrafanaAlertRules()
+	if ListLogzioRulesErr != nil {
+		return nil, ListLogzioRulesErr
+	}
+	// find all alerts inside prometheus alerts folder
+	var alertsInFolder []grafana_alerts.GrafanaAlertRule
+	for _, rule := range alertRules {
+		if rule.FolderUID == folderUid {
+			alertsInFolder = append(alertsInFolder, rule)
+		}
+	}
+	return &alertsInFolder, nil
+}
+
+func (c *Controller) findOrCreatePrometheusAlertsFolder() (string, error) {
+	folders, err := c.logzioFolderClient.ListGrafanaFolders()
+	if err != nil {
+		return "", err
+	}
+	// try to find the prometheus alerts folder
+	for _, folder := range folders {
+		if folder.Title == alertFolder {
+			return folder.Uid, nil
+		}
+	}
+	// if not found, create the prometheus alerts folder
+	grafanaFolder, err := c.logzioFolderClient.CreateGrafanaFolder(grafana_folders.CreateUpdateFolder{
+		Uid:   fmt.Sprintf("%s-%s", alertFolder, generateRandomString(5)),
+		Title: alertFolder,
+	})
+	if err != nil {
+		return "", err
+	}
+	return grafanaFolder.Uid, nil
+}
 
 func (c *Controller) extractValues(cm *corev1.ConfigMap) []rulefmt.RuleNode {
 
-	fallbackNameStub := c.createNameStub(cm)
+	fallbackNameStub := createNameStub(cm)
 
 	// make a bucket for random non fully formed rulegroups (just a single rulegroup) to live
 	var mrg []rulefmt.RuleNode
@@ -383,7 +484,7 @@ func (c *Controller) haveConfigMapsChanged(mapList *corev1.ConfigMapList) bool {
 	changes := false
 	for _, cm := range mapList.Items {
 		if c.isRuleConfigMap(&cm) {
-			stub := c.createNameStub(&cm)
+			stub := createNameStub(&cm)
 			val, ok := c.resourceVersionMap[stub]
 			if !ok {
 				// new configmap
@@ -407,19 +508,12 @@ func (c *Controller) recordEventOnConfigMap(cm *corev1.ConfigMap, eventtype, rea
 	}
 }
 
-func (c *Controller) createNameStub(cm *corev1.ConfigMap) string {
-	name := cm.GetObjectMeta().GetName()
-	namespace := cm.GetObjectMeta().GetNamespace()
-
-	return fmt.Sprintf("%s-%s", namespace, name)
-}
-
 func (c *Controller) saltRuleGroupNames(rgs *rulefmt.RuleGroups) *rulefmt.RuleGroups {
 	usedNames := make(map[string]string)
 	for i := 0; i < len(rgs.Groups); i++ {
 		if _, ok := usedNames[rgs.Groups[i].Name]; ok {
 			// used name, salt
-			rgs.Groups[i].Name = fmt.Sprintf("%s-%s", rgs.Groups[i].Name, c.generateRandomString(5))
+			rgs.Groups[i].Name = fmt.Sprintf("%s-%s", rgs.Groups[i].Name, generateRandomString(5))
 		}
 		usedNames[rgs.Groups[i].Name] = "yes"
 	}
@@ -431,7 +525,7 @@ func (c *Controller) configReload(url string) error {
 	req, err := http.NewRequest("POST", url, nil)
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("Unable to reload Prometheus config: %s", err)
+		return fmt.Errorf("unable to reload Prometheus config: %s", err)
 	}
 
 	if resp.StatusCode >= 200 && resp.StatusCode < 400 {
@@ -439,25 +533,61 @@ func (c *Controller) configReload(url string) error {
 		return nil
 	}
 
-	respBody, _ := ioutil.ReadAll(resp.Body)
-	return fmt.Errorf("Unable to reload the Prometheus config. Endpoint: %s, Reponse StatusCode: %d, Response Body: %s", url, resp.StatusCode, string(respBody))
+	respBody, _ := io.ReadAll(resp.Body)
+	return fmt.Errorf("unable to reload the Prometheus config. Endpoint: %s, Reponse StatusCode: %d, Response Body: %s", url, resp.StatusCode, string(respBody))
 }
 
-// borrowed from here https://stackoverflow.com/questions/22892120/how-to-generate-a-random-string-of-a-fixed-length-in-go
-func (c *Controller) generateRandomString(n int) string {
-	b := make([]byte, n)
-	src := *c.randSrc
-	for i, cache, remain := n-1, src.Int63(), letterIdxMax; i >= 0; {
-		if remain == 0 {
-			cache, remain = src.Int63(), letterIdxMax
-		}
-		if idx := int(cache & letterIdxMask); idx < len(letterBytes) {
-			b[i] = letterBytes[idx]
-			i--
-		}
-		cache >>= letterIdxBits
-		remain--
+// compareAlertRules compares the rules from Kubernetes with those in Logz.io.
+// It returns three slices of rulefmt.RuleNode and grafana_alerts.GrafanaAlertRule indicating which rules to add, update, or delete.
+func (c *Controller) compareAlertRules(rules *[]rulefmt.RuleNode, logzioRules *[]grafana_alerts.GrafanaAlertRule) (toAdd, toUpdate []rulefmt.RuleNode, toDelete []grafana_alerts.GrafanaAlertRule) {
+	// Maps for efficient lookups by alert name.
+	rulesMap := make(map[string]rulefmt.RuleNode)
+	logzioRulesMap := make(map[string]grafana_alerts.GrafanaAlertRule)
+
+	// Process Kubernetes alerts into a map.
+	for _, alert := range *rules {
+		rulesMap[alert.Alert.Value] = alert
+	}
+	// Process Logz.io alerts into a map.
+	for _, alert := range *logzioRules {
+		logzioRulesMap[alert.Title] = alert
 	}
 
-	return string(b)
+	// If Kubernetes alerts list is not empty, find alerts to add or update.
+	if len(*rules) > 0 {
+		for _, rule := range *rules {
+			logzioAlert, exists := logzioRulesMap[rule.Alert.Value]
+			if !exists {
+				// Alert doesn't exist in Logz.io, so we need to add it.
+				toAdd = append(toAdd, rule)
+			} else if !isAlertEqual(rule, logzioAlert) {
+				// Alert exists but differs, so we need to update it.
+				toUpdate = append(toUpdate, rule)
+			}
+			// If alert exists and is the same, no action is needed.
+		}
+	}
+
+	// If Logz.io alerts list is not empty, find alerts to delete.
+	if len(*logzioRules) > 0 {
+		for _, logzioAlert := range *logzioRules {
+			if _, exists := rulesMap[logzioAlert.Title]; !exists {
+				// Alert is in Logz.io but not in Kubernetes, so we need to delete it.
+				toDelete = append(toDelete, logzioAlert)
+			}
+		}
+	}
+
+	return toAdd, toUpdate, toDelete
+}
+
+// isAlertEqual compares two AlertRule objects for equality.
+// You should expand this function to compare all relevant fields of AlertRule.
+func isAlertEqual(rule rulefmt.RuleNode, grafanaRule grafana_alerts.GrafanaAlertRule) bool {
+	// Start with name comparison; if these don't match, they're definitely not equal.
+	if rule.Alert.Value != grafanaRule.Title {
+		return false
+	}
+	// TODO: deep comparison
+	return true
 }
