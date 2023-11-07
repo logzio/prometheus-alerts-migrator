@@ -295,7 +295,15 @@ func (c *Controller) syncHandler(key string) error {
 			// Compare alerts from configmaps with logzio rules inside "prometheus-alerts" folder
 			toAdd, toUpdate, toDelete := c.compareAlertRules(alertRules, logzioAlertRules)
 			klog.Infof("toAdd: %d, toUpdate: %d, toDelete: %d", toAdd, toUpdate, toDelete)
-			// TODO: handle crud
+			if len(toAdd) > 0 {
+				c.writeRules(toAdd, folderUid)
+			}
+			if len(toUpdate) > 0 {
+				c.updateRules(toUpdate, folderUid)
+			}
+			if len(toDelete) > 0 {
+				c.deleteRules(toDelete, folderUid)
+			}
 		}
 
 	}
@@ -303,7 +311,42 @@ func (c *Controller) syncHandler(key string) error {
 	return nil
 }
 
-func (c *Controller) writeRule(rule rulefmt.RuleNode, folderUid string) error {
+func (c *Controller) deleteRules(rules []grafana_alerts.GrafanaAlertRule, folderUid string) {
+	for _, rule := range rules {
+		err := c.logzioAlertClient.DeleteGrafanaAlertRule(rule.Uid)
+		if err != nil {
+			klog.Warning(err)
+		}
+	}
+}
+
+func (c *Controller) updateRules(rules []rulefmt.RuleNode, folderUid string) {
+	for _, rule := range rules {
+		alert, err := c.generateGrafanaAlert(rule, folderUid)
+		if err != nil {
+			klog.Warning(err)
+		}
+		err = c.logzioAlertClient.UpdateGrafanaAlertRule(alert)
+		if err != nil {
+			klog.Warning(err)
+		}
+	}
+}
+
+func (c *Controller) writeRules(rules []rulefmt.RuleNode, folderUid string) {
+	for _, rule := range rules {
+		alert, err := c.generateGrafanaAlert(rule, folderUid)
+		if err != nil {
+			klog.Warning(err)
+		}
+		_, err = c.logzioAlertClient.CreateGrafanaAlertRule(alert)
+		if err != nil {
+			klog.Warning(err)
+		}
+	}
+}
+
+func (c *Controller) generateGrafanaAlert(rule rulefmt.RuleNode, folderUid string) (grafana_alerts.GrafanaAlertRule, error) {
 	// Create an instance of the Prometheus query.
 	query := PrometheusQuery{
 		Expr:  rule.Expr.Value,
@@ -313,7 +356,7 @@ func (c *Controller) writeRule(rule rulefmt.RuleNode, folderUid string) error {
 	// Use the ToJSON method to marshal the Query struct.
 	model, err := query.ToJSON()
 	if err != nil {
-		return err
+		return grafana_alerts.GrafanaAlertRule{}, err
 	}
 	data := grafana_alerts.GrafanaAlertQuery{
 		DatasourceUid: c.rulesDataSource,
@@ -327,9 +370,9 @@ func (c *Controller) writeRule(rule rulefmt.RuleNode, folderUid string) error {
 	}
 	duration, err := parseDuration(rule.For.String())
 	if err != nil {
-		return err
+		return grafana_alerts.GrafanaAlertRule{}, err
 	}
-	createGrafanaAlert := grafana_alerts.GrafanaAlertRule{
+	grafanaAlert := grafana_alerts.GrafanaAlertRule{
 		Annotations:  rule.Annotations,
 		Condition:    "A",
 		Data:         []*grafana_alerts.GrafanaAlertQuery{&data},
@@ -342,12 +385,7 @@ func (c *Controller) writeRule(rule rulefmt.RuleNode, folderUid string) error {
 		Title:        rule.Alert.Value,
 		For:          duration,
 	}
-	newAlert, writeRuleErr := c.logzioAlertClient.CreateGrafanaAlertRule(createGrafanaAlert)
-	klog.Info(newAlert)
-	if writeRuleErr != nil {
-		utilruntime.HandleError(writeRuleErr)
-	}
-	return nil
+	return grafanaAlert, nil
 }
 
 // get the cm on the workqueue
