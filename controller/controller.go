@@ -20,6 +20,7 @@ import (
 	"k8s.io/klog"
 	"net/http"
 	"os"
+	"reflect"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -586,6 +587,20 @@ func (c *Controller) compareAlertRules(rules *[]rulefmt.RuleNode, logzioRules *[
 func isAlertEqual(rule rulefmt.RuleNode, grafanaRule grafana_alerts.GrafanaAlertRule) bool {
 	// Start with name comparison; if these don't match, they're definitely not equal.
 	if rule.Alert.Value != grafanaRule.Title {
+		return false
+	}
+	if !reflect.DeepEqual(rule.Labels, grafanaRule.Labels) {
+		return false
+	}
+	if !reflect.DeepEqual(rule.Annotations, grafanaRule.Annotations) {
+		return false
+	}
+	// compare for
+	forAtt, _ := parseDuration(rule.For.String())
+	if forAtt != grafanaRule.For {
+		return false
+	}
+	if rule.Expr.Value != grafanaRule.Data[0].Model.(map[string]interface{})["expr"] {
 		return false
 	}
 	// TODO: deep comparison
