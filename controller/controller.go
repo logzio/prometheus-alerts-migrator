@@ -9,7 +9,6 @@ import (
 	"github.com/prometheus/prometheus/model/rulefmt"
 	_ "github.com/prometheus/prometheus/promql/parser"
 	"gopkg.in/yaml.v3"
-	"io"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
@@ -18,9 +17,6 @@ import (
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
-	"net/http"
-	"os"
-	"reflect"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -83,8 +79,6 @@ type Controller struct {
 
 	resourceVersionMap         map[string]string
 	interestingAnnotation      *string
-	reloadEndpoint             *string
-	rulesPath                  *string
 	configmapEventRecorderFunc func(cm *corev1.ConfigMap, eventtype, reason, msg string)
 }
 
@@ -96,10 +90,10 @@ func NewController(
 	kubeclientset *kubernetes.Clientset,
 	configmapInformer corev1informers.ConfigMapInformer,
 	interestingAnnotation *string,
-	reloadEndpoint *string,
-	rulesPath *string,
 	logzioApiToken string,
 	logzioApiUrl string,
+	rulesDs string,
+	envId string,
 ) *Controller {
 
 	utilruntime.Must(scheme.AddToScheme(scheme.Scheme))
@@ -120,16 +114,14 @@ func NewController(
 		workqueue:             workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter()),
 		recorder:              recorder,
 		interestingAnnotation: interestingAnnotation,
-		reloadEndpoint:        reloadEndpoint,
-		rulesPath:             rulesPath,
 		resourceVersionMap:    make(map[string]string),
 		logzioAlertClient:     logzioAlertClient,
 		logzioFolderClient:    logzioFolderClient,
-		// TODO: get the value in main.go
-		rulesDataSource: os.Getenv("RULES_DS"),
+		rulesDataSource:       rulesDs,
+		envId:                 envId,
 	}
 
-	// is this idomatic?
+	//// is this idomatic?
 	controller.configmapEventRecorderFunc = controller.recordEventOnConfigMap
 
 	klog.Info("Setting up event handlers")
@@ -294,7 +286,7 @@ func (c *Controller) syncHandler(key string) error {
 			}
 			// Compare alerts from configmaps with logzio rules inside "prometheus-alerts" folder
 			toAdd, toUpdate, toDelete := c.compareAlertRules(alertRules, logzioAlertRules)
-			klog.Infof("toAdd: %d, toUpdate: %d, toDelete: %d", toAdd, toUpdate, toDelete)
+			klog.Infof("Alert rules summary: to add: %d, to update: %d, to delete: %d", len(toAdd), len(toUpdate), len(toDelete))
 			if len(toAdd) > 0 {
 				c.writeRules(toAdd, folderUid)
 			}
@@ -315,7 +307,8 @@ func (c *Controller) deleteRules(rules []grafana_alerts.GrafanaAlertRule, folder
 	for _, rule := range rules {
 		err := c.logzioAlertClient.DeleteGrafanaAlertRule(rule.Uid)
 		if err != nil {
-			klog.Warning(err)
+			msg := fmt.Sprintf("Error updating rule: %s - %s", rule.Title, err.Error())
+			klog.Warning(msg)
 		}
 	}
 }
@@ -328,7 +321,8 @@ func (c *Controller) updateRules(rules []rulefmt.RuleNode, folderUid string) {
 		}
 		err = c.logzioAlertClient.UpdateGrafanaAlertRule(alert)
 		if err != nil {
-			klog.Warning(err)
+			msg := fmt.Sprintf("Error updating rule: %s - %s", alert.Title, err.Error())
+			klog.Warning(msg)
 		}
 	}
 }
@@ -341,7 +335,8 @@ func (c *Controller) writeRules(rules []rulefmt.RuleNode, folderUid string) {
 		}
 		_, err = c.logzioAlertClient.CreateGrafanaAlertRule(alert)
 		if err != nil {
-			klog.Warning(err)
+			msg := fmt.Sprintf("Error writing rule: %s - %s", alert.Title, err.Error())
+			klog.Warning(msg)
 		}
 	}
 }
@@ -453,7 +448,6 @@ func (c *Controller) extractValues(cm *corev1.ConfigMap) []rulefmt.RuleNode {
 
 	fallbackNameStub := createNameStub(cm)
 
-	// make a bucket for random non fully formed rulegroups (just a single rulegroup) to live
 	var mrg []rulefmt.RuleNode
 
 	for key, value := range cm.Data {
@@ -466,6 +460,10 @@ func (c *Controller) extractValues(cm *corev1.ConfigMap) []rulefmt.RuleNode {
 			errorMsg := fmt.Sprintf("Configmap: %s key: %s Error during extraction.", fallbackNameStub, key)
 			c.configmapEventRecorderFunc(cm, corev1.EventTypeWarning, ErrInvalidKey, errorMsg)
 		}
+
+		// Add unique name for the alert rule to prevent duplicate rules ([alert_name]-[configmap_name]-[configmap_namespace])
+		rule.Alert.Value = fmt.Sprintf("%s-%s-%s", cm.Name, cm.Namespace, key)
+
 		if len(rule.Alert.Value) == 0 {
 			errorMsg := fmt.Sprintf("Configmap: %s key: %s does not conform to any of the legal format Skipping.", fallbackNameStub, key)
 			c.configmapEventRecorderFunc(cm, corev1.EventTypeWarning, ErrInvalidKey, errorMsg)
@@ -482,11 +480,10 @@ func (c *Controller) extractValues(cm *corev1.ConfigMap) []rulefmt.RuleNode {
 			} else {
 				// add to the rulegroups
 				mrg = append(mrg, rule)
-				successMessage := fmt.Sprintf("Configmap: %s key: %s Rule accepted.", fallbackNameStub, key)
-				c.configmapEventRecorderFunc(cm, corev1.EventTypeNormal, ValidKey, successMessage)
 			}
 		}
 	}
+	klog.Info(fmt.Sprintf("Found %d rules in %s configmap", len(mrg), cm.Name))
 
 	return mrg
 }
@@ -500,7 +497,6 @@ func (c *Controller) extractRules(value string) (error, rulefmt.RuleNode) {
 	if len(rule.Alert.Value) == 0 {
 		return fmt.Errorf("no Rules found"), rule
 	}
-
 	return nil, rule
 }
 
@@ -547,35 +543,6 @@ func (c *Controller) recordEventOnConfigMap(cm *corev1.ConfigMap, eventtype, rea
 	}
 }
 
-func (c *Controller) saltRuleGroupNames(rgs *rulefmt.RuleGroups) *rulefmt.RuleGroups {
-	usedNames := make(map[string]string)
-	for i := 0; i < len(rgs.Groups); i++ {
-		if _, ok := usedNames[rgs.Groups[i].Name]; ok {
-			// used name, salt
-			rgs.Groups[i].Name = fmt.Sprintf("%s-%s", rgs.Groups[i].Name, generateRandomString(5))
-		}
-		usedNames[rgs.Groups[i].Name] = "yes"
-	}
-	return rgs
-}
-
-func (c *Controller) configReload(url string) error {
-	client := &http.Client{}
-	req, err := http.NewRequest("POST", url, nil)
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("unable to reload Prometheus config: %s", err)
-	}
-
-	if resp.StatusCode >= 200 && resp.StatusCode < 400 {
-		klog.Info("Prometheus configuration reloaded.")
-		return nil
-	}
-
-	respBody, _ := io.ReadAll(resp.Body)
-	return fmt.Errorf("unable to reload the Prometheus config. Endpoint: %s, Reponse StatusCode: %d, Response Body: %s", url, resp.StatusCode, string(respBody))
-}
-
 // compareAlertRules compares the rules from Kubernetes with those in Logz.io.
 // It returns three slices of rulefmt.RuleNode and grafana_alerts.GrafanaAlertRule indicating which rules to add, update, or delete.
 func (c *Controller) compareAlertRules(rules *[]rulefmt.RuleNode, logzioRules *[]grafana_alerts.GrafanaAlertRule) (toAdd, toUpdate []rulefmt.RuleNode, toDelete []grafana_alerts.GrafanaAlertRule) {
@@ -618,29 +585,4 @@ func (c *Controller) compareAlertRules(rules *[]rulefmt.RuleNode, logzioRules *[
 	}
 
 	return toAdd, toUpdate, toDelete
-}
-
-// isAlertEqual compares two AlertRule objects for equality.
-// You should expand this function to compare all relevant fields of AlertRule.
-func isAlertEqual(rule rulefmt.RuleNode, grafanaRule grafana_alerts.GrafanaAlertRule) bool {
-	// Start with name comparison; if these don't match, they're definitely not equal.
-	if rule.Alert.Value != grafanaRule.Title {
-		return false
-	}
-	if !reflect.DeepEqual(rule.Labels, grafanaRule.Labels) {
-		return false
-	}
-	if !reflect.DeepEqual(rule.Annotations, grafanaRule.Annotations) {
-		return false
-	}
-	// compare for
-	forAtt, _ := parseDuration(rule.For.String())
-	if forAtt != grafanaRule.For {
-		return false
-	}
-	if rule.Expr.Value != grafanaRule.Data[0].Model.(map[string]interface{})["expr"] {
-		return false
-	}
-	// TODO: deep comparison
-	return true
 }
