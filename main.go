@@ -2,99 +2,107 @@ package main
 
 import (
 	"flag"
-	"github.com/logzio/prometheus-alerts-migrator/controller"
-	"github.com/logzio/prometheus-alerts-migrator/pkg/signals"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
-	"k8s.io/client-go/util/homedir"
-	"k8s.io/klog"
 	"os"
-	"path/filepath"
 	"time"
 
-	"k8s.io/client-go/tools/clientcmd"
-
-	kubeinformers "k8s.io/client-go/informers"
+	"github.com/logzio/prometheus-alerts-migrator/controller"
+	"github.com/logzio/prometheus-alerts-migrator/pkg/signals"
+	"k8s.io/client-go/informers"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/klog"
 )
 
-var (
-	// flags general
-	helpFlag            = flag.Bool("help", false, "")
-	configmapAnnotation = flag.String("annotation", "prometheus.io/kube-rules", "Annotation that states that this configmap contains prometheus rules.")
-	rulesPath           = flag.String("rulespath", "/rules", "Filepath where the rules from the configmap file should be written, this should correspond to a rule_files: location in your prometheus config.")
-	reloadEndpoint      = flag.String("endpoint", "http://localhost:9090/-/reload/", "Endpoint of the Prometheus reset endpoint (eg: http://prometheus:9090/-/reload).")
-	batchTime           = flag.Int("batchtime", 5, "Time window to batch updates (in seconds, default: 5)")
+// Config holds all the configuration needed for the application to run.
+type Config struct {
+	Annotation     string
+	LogzioAPIToken string
+	LogzioAPIURL   string
+	RulesDS        string
+	EnvID          string
+}
 
-	clientset *kubernetes.Clientset
-	lastSha   string
-)
+// NewConfig creates a Config struct, populating it with values from command-line flags and environment variables.
+func NewConfig() *Config {
+	// Define flags
+	helpFlag := flag.Bool("help", false, "Display help")
+	configmapAnnotation := flag.String("annotation", "prometheus.io/kube-rules", "Annotation that states that this configmap contains prometheus rules")
+	logzioAPITokenFlag := flag.String("logzio-api-token", "", "LOGZIO API token")
+	logzioAPIURLFlag := flag.String("logzio-api-url", "https://api.logz.io", "LOGZIO API URL")
+	rulesDSFlag := flag.String("rules-ds", "", "name of the data source for the alert rules")
+	envIDFlag := flag.String("env-id", "", "Environment ID")
 
-const (
-	// Resync period for the kube controller loop.
-	resyncPeriod = 30 * time.Minute
-	// A subdomain added to the user specified domain for all services.
-	serviceSubdomain = "svc"
-	// A subdomain added to the user specified dmoain for all pods.
-	podSubdomain = "pod"
-)
+	// Parse the flags
+	flag.Parse()
 
-// GetConfig returns a Kubernetes config
-func GetConfig() (*rest.Config, error) {
-	var config *rest.Config
-
-	kubeconfig := filepath.Join(homedir.HomeDir(), ".kube", "config")
-	if _, err := os.Stat(kubeconfig); err == nil {
-		config, err = clientcmd.BuildConfigFromFlags("", kubeconfig)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		config, err = rest.InClusterConfig()
-		if err != nil {
-			return nil, err
-		}
+	if *helpFlag {
+		flag.PrintDefaults()
+		os.Exit(0)
 	}
 
-	return config, nil
+	// Environment variables have lower precedence than flags
+	logzioAPIURL := getEnvWithFallback("LOGZIO_API_URL", *logzioAPIURLFlag)
+	envID := getEnvWithFallback("ENV_ID", *envIDFlag)
+	// api token is mandatory
+	logzioAPIToken := getEnvWithFallback("LOGZIO_API_TOKEN", *logzioAPITokenFlag)
+	if logzioAPIToken == "" {
+		klog.Fatal("No logzio api token provided")
+	}
+	rulesDS := getEnvWithFallback("RULES_DS", *rulesDSFlag)
+	if rulesDS == "" {
+		klog.Fatal("No rules data source provided")
+	}
+	// Annotation must be provided either by flag or environment variable
+	annotation := getEnvWithFallback("CONFIGMAP_ANNOTATION", *configmapAnnotation)
+	if annotation == "" {
+		klog.Fatal("No ConfigMap annotation provided")
+	}
+
+	return &Config{
+		Annotation:     annotation,
+		LogzioAPIToken: logzioAPIToken,
+		LogzioAPIURL:   logzioAPIURL,
+		RulesDS:        rulesDS,
+		EnvID:          envID,
+	}
+}
+
+// getEnvWithFallback tries to get the value from an environment variable and falls back to the given default value if not found.
+func getEnvWithFallback(envName, defaultValue string) string {
+	if value, exists := os.LookupEnv(envName); exists {
+		return value
+	}
+	return defaultValue
 }
 
 func main() {
-	flag.Parse()
-
-	if *helpFlag ||
-		*configmapAnnotation == "" ||
-		*rulesPath == "" ||
-		*reloadEndpoint == "" {
-		flag.PrintDefaults()
-		os.Exit(1)
-	}
+	config := NewConfig()
 
 	klog.Info("Rule Updater starting.\n")
-	klog.Infof("ConfigMap annotation: %s\n", *configmapAnnotation)
-	klog.Infof("Rules location: %s\n", *rulesPath)
+	klog.Infof("ConfigMap annotation: %s\n", config.Annotation)
+	klog.Infof("Environment ID: %s\n", config.EnvID)
+	klog.Infof("Logzio api url: %s\n", config.LogzioAPIURL)
+	klog.Infof("Logzio rules data source: %s\n", config.RulesDS)
 
 	// set up signals so we handle the first shutdown signal gracefully
 	stopCh := signals.SetupSignalHandler()
 
-	cfg, err := GetConfig()
+	cfg, err := controller.GetConfig()
 	if err != nil {
-		klog.Fatalf("Error getting Kubernetes config")
+		klog.Fatalf("Error getting Kubernetes config: %s", err)
 	}
 
 	kubeClient, err := kubernetes.NewForConfig(cfg)
 	if err != nil {
-		klog.Fatalf("Error building kubernetes clientset: %s", err.Error())
+		klog.Fatalf("Error building kubernetes clientset: %s", err)
 	}
 
-	kubeInformerFactory := kubeinformers.NewSharedInformerFactory(kubeClient, time.Second*30)
+	kubeInformerFactory := informers.NewSharedInformerFactory(kubeClient, time.Second*30)
 
-	c := controller.NewController(kubeClient, kubeInformerFactory.Core().V1().ConfigMaps(), configmapAnnotation, reloadEndpoint, rulesPath, os.Getenv("LOGZIO_API_TOKEN"), os.Getenv("LOGZIO_API_URL"))
+	c := controller.NewController(kubeClient, kubeInformerFactory.Core().V1().ConfigMaps(), &config.Annotation, config.LogzioAPIToken, config.LogzioAPIURL, config.RulesDS, config.EnvID)
 
-	// notice that there is no need to run Start methods in a separate goroutine. (i.e. go kubeInformerFactory.Start(stopCh)
-	// Start method is non-blocking and runs all registered informers in a dedicated goroutine.
 	kubeInformerFactory.Start(stopCh)
 
 	if err = c.Run(2, stopCh); err != nil {
-		klog.Fatalf("Error running controller: %s", err.Error())
+		klog.Fatalf("Error running controller: %s", err)
 	}
 }
