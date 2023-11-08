@@ -2,8 +2,16 @@ package controller
 
 import (
 	"fmt"
+	"github.com/logzio/logzio_terraform_client/grafana_alerts"
+	"github.com/prometheus/prometheus/model/rulefmt"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/util/homedir"
 	"math/rand"
+	"os"
+	"path/filepath"
+	"reflect"
 	"strconv"
 	"time"
 )
@@ -54,4 +62,47 @@ func createNameStub(cm *corev1.ConfigMap) string {
 	namespace := cm.GetObjectMeta().GetNamespace()
 
 	return fmt.Sprintf("%s-%s", namespace, name)
+}
+
+// isAlertEqual compares two AlertRule objects for equality.
+// You should expand this function to compare all relevant fields of AlertRule.
+func isAlertEqual(rule rulefmt.RuleNode, grafanaRule grafana_alerts.GrafanaAlertRule) bool {
+	// Start with name comparison; if these don't match, they're definitely not equal.
+	if rule.Alert.Value != grafanaRule.Title {
+		return false
+	}
+	if !reflect.DeepEqual(rule.Labels, grafanaRule.Labels) {
+		return false
+	}
+	if !reflect.DeepEqual(rule.Annotations, grafanaRule.Annotations) {
+		return false
+	}
+	forAtt, _ := parseDuration(rule.For.String())
+	if forAtt != grafanaRule.For {
+		return false
+	}
+	if rule.Expr.Value != grafanaRule.Data[0].Model.(map[string]interface{})["expr"] {
+		return false
+	}
+	return true
+}
+
+// GetConfig returns a Kubernetes config
+func GetConfig() (*rest.Config, error) {
+	var config *rest.Config
+
+	kubeconfig := filepath.Join(homedir.HomeDir(), ".kube", "config")
+	if _, err := os.Stat(kubeconfig); err == nil {
+		config, err = clientcmd.BuildConfigFromFlags("", kubeconfig)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		config, err = rest.InClusterConfig()
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return config, nil
 }
