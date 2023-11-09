@@ -1,28 +1,16 @@
-app_name := prometheusAlertsMigrator
-container_name := prometheusAlertsMigrator
-container_registry := logzio/prometheusAlertsMigrator
-container_release := 0.0.1
+IMAGE_NAME := prometheus-alerts-migrator
+IMAGE_TAG := v1.0.0-test
+DOCKER_REPO := logzio/$(IMAGE_NAME):$(IMAGE_TAG)
+K8S_NAMESPACE := monitoring
 
-.PHONY: build tag/image push/image clean
+.PHONY: docker-build
+docker-build:
+	docker build -t $(DOCKER_REPO) .
 
-build/linux/$(app_name): *.go | build
-	GOOS=linux GOARCH=amd64 go build -o $@ .
+.PHONY: docker-push
+docker-push:
+	docker push $(DOCKER_REPO)
 
-build/darwin/$(app_name): *.go | build
-	GOOS=darwin GOARCH=amd64 go build -o $@ .
-
-build/image: build/linux/$(app_name) Dockerfile
-	docker build \
-		-t $(container_name) .
-
-tag/image: build/image
-	docker tag $(container_name) $(container_registry)/$(container_name):$(container_release)
-
-push/image: tag/image
-	docker push $(container_registry)/$(container_name):$(container_release)
-
-build:
-	mkdir -p build/linux build/darwin
-
-clean:
-	rm -rf build
+.PHONY: run-local
+run-local:
+	go run main.go
