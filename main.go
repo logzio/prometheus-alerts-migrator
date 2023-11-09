@@ -29,7 +29,7 @@ func NewConfig() *Config {
 	logzioAPITokenFlag := flag.String("logzio-api-token", "", "LOGZIO API token")
 	logzioAPIURLFlag := flag.String("logzio-api-url", "https://api.logz.io", "LOGZIO API URL")
 	rulesDSFlag := flag.String("rules-ds", "", "name of the data source for the alert rules")
-	envIDFlag := flag.String("env-id", "", "Environment ID")
+	envIDFlag := flag.String("env-id", "my-env", "environment identifier, usually cluster name")
 
 	// Parse the flags
 	flag.Parse()
