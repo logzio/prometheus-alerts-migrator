@@ -35,6 +35,7 @@ const (
 	letterIdxBits       = 6                    // 6 bits to represent a letter index
 	letterIdxMask       = 1<<letterIdxBits - 1 // All 1-bits, as many as letterIdxBits
 	letterIdxMax        = 63 / letterIdxBits   // # of letter indices fitting in 63 bits
+	refId               = "A"
 )
 
 // PrometheusQuery represents a Prometheus query.
@@ -355,7 +356,7 @@ func (c *Controller) generateGrafanaAlert(rule rulefmt.RuleNode, folderUid strin
 	query := PrometheusQuery{
 		Expr:  rule.Expr.Value,
 		Hide:  false,
-		RefId: "A",
+		RefId: refId,
 	}
 	// Use the ToJSON method to marshal the Query struct.
 	model, err := query.ToJSON()
@@ -365,7 +366,7 @@ func (c *Controller) generateGrafanaAlert(rule rulefmt.RuleNode, folderUid strin
 	data := grafana_alerts.GrafanaAlertQuery{
 		DatasourceUid: c.rulesDataSource,
 		Model:         model,
-		RefId:         "A",
+		RefId:         refId,
 		QueryType:     "query",
 		RelativeTimeRange: grafana_alerts.RelativeTimeRangeObj{
 			From: 300,
@@ -378,7 +379,7 @@ func (c *Controller) generateGrafanaAlert(rule rulefmt.RuleNode, folderUid strin
 	}
 	grafanaAlert := grafana_alerts.GrafanaAlertRule{
 		Annotations:  rule.Annotations,
-		Condition:    "A",
+		Condition:    refId,
 		Data:         []*grafana_alerts.GrafanaAlertQuery{&data},
 		FolderUID:    folderUid,
 		NoDataState:  grafana_alerts.NoDataOk,
