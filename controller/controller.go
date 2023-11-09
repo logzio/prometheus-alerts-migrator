@@ -31,7 +31,6 @@ const (
 	alertFolder         = "prometheus-alerts"
 	controllerAgentName = "logzio-prometheus-alerts-migrator-controller"
 	ErrInvalidKey       = "InvalidKey"
-	ValidKey            = "ValidKey"
 	letterBytes         = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 	letterIdxBits       = 6                    // 6 bits to represent a letter index
 	letterIdxMask       = 1<<letterIdxBits - 1 // All 1-bits, as many as letterIdxBits
@@ -121,9 +120,7 @@ func NewController(
 		envId:                 envId,
 	}
 
-	//// is this idomatic?
 	controller.configmapEventRecorderFunc = controller.recordEventOnConfigMap
-
 	klog.Info("Setting up event handlers")
 	configmapInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: controller.enqueueConfigMap,
@@ -251,13 +248,11 @@ func (c *Controller) syncHandler(key string) error {
 		}
 	}
 
-	// I don't love this bypass
 	bypassCheck := false
 	if configmap == nil {
 		// deleted
 		bypassCheck = true
 	}
-
 	if c.isRuleConfigMap(configmap) || bypassCheck {
 		mapList, cmListErr := c.kubeclientset.CoreV1().ConfigMaps(corev1.NamespaceAll).List(context.Background(), metav1.ListOptions{})
 		if cmListErr != nil {
@@ -284,14 +279,26 @@ func (c *Controller) syncHandler(key string) error {
 				utilruntime.HandleError(ListLogzioRulesErr)
 				return ListLogzioRulesErr
 			}
+			// Maps for efficient lookups by alert name.
+			rulesMap := make(map[string]rulefmt.RuleNode)
+			logzioRulesMap := make(map[string]grafana_alerts.GrafanaAlertRule)
+
+			// Process Kubernetes alerts into a map.
+			for _, alert := range *alertRules {
+				rulesMap[alert.Alert.Value] = alert
+			}
+			// Process Logz.io alerts into a map.
+			for _, alert := range *logzioAlertRules {
+				logzioRulesMap[alert.Title] = alert
+			}
 			// Compare alerts from configmaps with logzio rules inside "prometheus-alerts" folder
-			toAdd, toUpdate, toDelete := c.compareAlertRules(alertRules, logzioAlertRules)
+			toAdd, toUpdate, toDelete := c.compareAlertRules(alertRules, logzioAlertRules, rulesMap, logzioRulesMap)
 			klog.Infof("Alert rules summary: to add: %d, to update: %d, to delete: %d", len(toAdd), len(toUpdate), len(toDelete))
 			if len(toAdd) > 0 {
 				c.writeRules(toAdd, folderUid)
 			}
 			if len(toUpdate) > 0 {
-				c.updateRules(toUpdate, folderUid)
+				c.updateRules(toUpdate, logzioRulesMap, folderUid)
 			}
 			if len(toDelete) > 0 {
 				c.deleteRules(toDelete, folderUid)
@@ -303,40 +310,42 @@ func (c *Controller) syncHandler(key string) error {
 	return nil
 }
 
-func (c *Controller) deleteRules(rules []grafana_alerts.GrafanaAlertRule, folderUid string) {
-	for _, rule := range rules {
+func (c *Controller) deleteRules(rulesToDelete []grafana_alerts.GrafanaAlertRule, folderUid string) {
+	for _, rule := range rulesToDelete {
 		err := c.logzioAlertClient.DeleteGrafanaAlertRule(rule.Uid)
 		if err != nil {
-			msg := fmt.Sprintf("Error updating rule: %s - %s", rule.Title, err.Error())
-			klog.Warning(msg)
+			klog.Warningf("Error deleting rule: %s - %s", rule.Title, err.Error())
 		}
 	}
 }
 
-func (c *Controller) updateRules(rules []rulefmt.RuleNode, folderUid string) {
-	for _, rule := range rules {
+func (c *Controller) updateRules(rulesToUpdate []rulefmt.RuleNode, logzioRulesMap map[string]grafana_alerts.GrafanaAlertRule, folderUid string) {
+	for _, rule := range rulesToUpdate {
+		// Retrieve the existing GrafanaAlertRule to get the Uid.
+		existingRule := logzioRulesMap[rule.Alert.Value]
 		alert, err := c.generateGrafanaAlert(rule, folderUid)
 		if err != nil {
 			klog.Warning(err)
+			continue // Skip this rule and continue with the next
 		}
+		// Set the Uid from the existing rule.
+		alert.Uid = existingRule.Uid
 		err = c.logzioAlertClient.UpdateGrafanaAlertRule(alert)
 		if err != nil {
-			msg := fmt.Sprintf("Error updating rule: %s - %s", alert.Title, err.Error())
-			klog.Warning(msg)
+			klog.Warningf("Error updating rule: %s - %s", alert.Title, err.Error())
 		}
 	}
 }
 
-func (c *Controller) writeRules(rules []rulefmt.RuleNode, folderUid string) {
-	for _, rule := range rules {
+func (c *Controller) writeRules(rulesToWrite []rulefmt.RuleNode, folderUid string) {
+	for _, rule := range rulesToWrite {
 		alert, err := c.generateGrafanaAlert(rule, folderUid)
 		if err != nil {
 			klog.Warning(err)
 		}
 		_, err = c.logzioAlertClient.CreateGrafanaAlertRule(alert)
 		if err != nil {
-			msg := fmt.Sprintf("Error writing rule: %s - %s", alert.Title, err.Error())
-			klog.Warning(msg)
+			klog.Warning("Error writing rule: %s - %s", alert.Title, err.Error())
 		}
 	}
 }
@@ -500,6 +509,38 @@ func (c *Controller) extractRules(value string) (error, rulefmt.RuleNode) {
 	return nil, rule
 }
 
+// compareAlertRules compares the rules from Kubernetes with those in Logz.io.
+// It returns three slices of rulefmt.RuleNode and grafana_alerts.GrafanaAlertRule indicating which rules to add, update, or delete.
+func (c *Controller) compareAlertRules(rules *[]rulefmt.RuleNode, logzioRules *[]grafana_alerts.GrafanaAlertRule, rulesMap map[string]rulefmt.RuleNode, logzioRulesMap map[string]grafana_alerts.GrafanaAlertRule) (toAdd, toUpdate []rulefmt.RuleNode, toDelete []grafana_alerts.GrafanaAlertRule) {
+
+	// If Kubernetes alerts list is not empty, find alerts to add or update.
+	if len(*rules) > 0 {
+		for _, rule := range *rules {
+			logzioAlert, exists := logzioRulesMap[rule.Alert.Value]
+			if !exists {
+				// Alert doesn't exist in Logz.io, so we need to add it.
+				toAdd = append(toAdd, rule)
+			} else if !isAlertEqual(rule, logzioAlert) {
+				// Alert exists but differs, so we need to update it.
+				toUpdate = append(toUpdate, rule)
+			}
+			// If alert exists and is the same, no action is needed.
+		}
+	}
+
+	// If Logz.io alerts list is not empty, find alerts to delete.
+	if len(*logzioRules) > 0 {
+		for _, logzioAlert := range *logzioRules {
+			if _, exists := rulesMap[logzioAlert.Title]; !exists {
+				// Alert is in Logz.io but not in Kubernetes, so we need to delete it.
+				toDelete = append(toDelete, logzioAlert)
+			}
+		}
+	}
+
+	return toAdd, toUpdate, toDelete
+}
+
 func (c *Controller) isRuleConfigMap(cm *corev1.ConfigMap) bool {
 	if cm == nil {
 		return false
@@ -541,48 +582,4 @@ func (c *Controller) recordEventOnConfigMap(cm *corev1.ConfigMap, eventtype, rea
 	if eventtype == corev1.EventTypeWarning {
 		klog.Warning(msg)
 	}
-}
-
-// compareAlertRules compares the rules from Kubernetes with those in Logz.io.
-// It returns three slices of rulefmt.RuleNode and grafana_alerts.GrafanaAlertRule indicating which rules to add, update, or delete.
-func (c *Controller) compareAlertRules(rules *[]rulefmt.RuleNode, logzioRules *[]grafana_alerts.GrafanaAlertRule) (toAdd, toUpdate []rulefmt.RuleNode, toDelete []grafana_alerts.GrafanaAlertRule) {
-	// Maps for efficient lookups by alert name.
-	rulesMap := make(map[string]rulefmt.RuleNode)
-	logzioRulesMap := make(map[string]grafana_alerts.GrafanaAlertRule)
-
-	// Process Kubernetes alerts into a map.
-	for _, alert := range *rules {
-		rulesMap[alert.Alert.Value] = alert
-	}
-	// Process Logz.io alerts into a map.
-	for _, alert := range *logzioRules {
-		logzioRulesMap[alert.Title] = alert
-	}
-
-	// If Kubernetes alerts list is not empty, find alerts to add or update.
-	if len(*rules) > 0 {
-		for _, rule := range *rules {
-			logzioAlert, exists := logzioRulesMap[rule.Alert.Value]
-			if !exists {
-				// Alert doesn't exist in Logz.io, so we need to add it.
-				toAdd = append(toAdd, rule)
-			} else if !isAlertEqual(rule, logzioAlert) {
-				// Alert exists but differs, so we need to update it.
-				toUpdate = append(toUpdate, rule)
-			}
-			// If alert exists and is the same, no action is needed.
-		}
-	}
-
-	// If Logz.io alerts list is not empty, find alerts to delete.
-	if len(*logzioRules) > 0 {
-		for _, logzioAlert := range *logzioRules {
-			if _, exists := rulesMap[logzioAlert.Title]; !exists {
-				// Alert is in Logz.io but not in Kubernetes, so we need to delete it.
-				toDelete = append(toDelete, logzioAlert)
-			}
-		}
-	}
-
-	return toAdd, toUpdate, toDelete
 }
