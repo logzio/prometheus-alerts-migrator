@@ -436,16 +436,17 @@ func (c *Controller) findOrCreatePrometheusAlertsFolder() (string, error) {
 	if err != nil {
 		return "", err
 	}
+	envFolderTitle := fmt.Sprintf("%s-%s", c.envId, alertFolder)
 	// try to find the prometheus alerts folder
 	for _, folder := range folders {
-		if folder.Title == alertFolder {
+		if folder.Title == envFolderTitle {
 			return folder.Uid, nil
 		}
 	}
 	// if not found, create the prometheus alerts folder
 	grafanaFolder, err := c.logzioFolderClient.CreateGrafanaFolder(grafana_folders.CreateUpdateFolder{
-		Uid:   fmt.Sprintf("%s-%s", alertFolder, generateRandomString(5)),
-		Title: alertFolder,
+		Uid:   fmt.Sprintf("%s-%s", envFolderTitle, generateRandomString(5)),
+		Title: envFolderTitle,
 	})
 	if err != nil {
 		return "", err
