@@ -56,7 +56,7 @@ func (p PrometheusQuery) ToJSON() (json.RawMessage, error) {
 	return marshaled, nil
 }
 
-// Controller is the controller implementation for Foo resources
+// Controller is the controller implementation for prometheus alert rules to logzio alert rules
 type Controller struct {
 	// kubeclientset is a standard kubernetes clientset
 	kubeclientset kubernetes.Interface

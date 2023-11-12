@@ -35,6 +35,7 @@ func generateRandomString(n int) string {
 	return string(b)
 }
 
+// parseDuration turns a duration string (example: 5m, 1h) into an int64 value
 func parseDuration(durationStr string) (int64, error) {
 	// Check if the string is empty
 	if durationStr == "" {
