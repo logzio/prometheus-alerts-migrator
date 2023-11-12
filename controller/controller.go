@@ -37,6 +37,7 @@ const (
 	letterIdxMax        = 63 / letterIdxBits   // # of letter indices fitting in 63 bits
 	randomStringLength  = 5
 	refId               = "A"
+	queryType           = "query"
 )
 
 // PrometheusQuery represents a Prometheus query.
@@ -226,8 +227,7 @@ func (c *Controller) processNextWorkItem() bool {
 }
 
 // syncHandler compares the actual state with the desired, and attempts to
-// converge the two. It then updates the Status block of the cm resource
-// with the current status of the resource.
+// converge the two
 func (c *Controller) syncHandler(key string) error {
 	namespace, name, err := cache.SplitMetaNamespaceKey(key)
 	if err != nil {
@@ -247,12 +247,21 @@ func (c *Controller) syncHandler(key string) error {
 	}
 
 	if c.isRuleConfigMap(configmap) || bypassCheck {
-		return c.processRuleConfigMap()
+		cmList, err := c.kubeclientset.CoreV1().ConfigMaps(corev1.NamespaceAll).List(context.Background(), metav1.ListOptions{})
+		if err != nil {
+			utilruntime.HandleError(fmt.Errorf("unable to collect configmaps from the cluster; %s", err))
+			return nil
+		}
+
+		if c.haveConfigMapsChanged(cmList) {
+			return c.processConfigMapsChanges(cmList)
+		}
 	}
 
 	return nil
 }
 
+// getConfigMap returns the ConfigMap with the specified name in the specified namespace, or nil if no such ConfigMap exists.
 func (c *Controller) getConfigMap(namespace, name string) (*corev1.ConfigMap, error) {
 	configmap, err := c.configmapsLister.ConfigMaps(namespace).Get(name)
 	if errors.IsNotFound(err) {
@@ -262,29 +271,16 @@ func (c *Controller) getConfigMap(namespace, name string) (*corev1.ConfigMap, er
 	return configmap, err
 }
 
-func (c *Controller) processRuleConfigMap() error {
-	mapList, err := c.kubeclientset.CoreV1().ConfigMaps(corev1.NamespaceAll).List(context.Background(), metav1.ListOptions{})
-	if err != nil {
-		utilruntime.HandleError(fmt.Errorf("unable to collect configmaps from the cluster; %s", err))
-		return nil
-	}
-
-	if c.haveConfigMapsChanged(mapList) {
-		return c.processConfigMapsChanges(mapList)
-	}
-
-	return nil
-}
-
+// processConfigMapsChanges gets the state of alert rules from both cluster configmaps and logz.io, compares the rules and decide what crud operations to perform
 func (c *Controller) processConfigMapsChanges(mapList *corev1.ConfigMapList) error {
-	alertRules := c.buildFinalConfig(mapList)
+	alertRules := c.getClusterAlertRules(mapList)
 	folderUid, err := c.findOrCreatePrometheusAlertsFolder()
 	if err != nil {
 		utilruntime.HandleError(err)
 		return err
 	}
 
-	logzioAlertRules, err := c.getLogzioPrometheusAlerts(folderUid)
+	logzioAlertRules, err := c.getLogzioGrafanaAlerts(folderUid)
 	if err != nil {
 		utilruntime.HandleError(err)
 		return err
@@ -316,6 +312,7 @@ func (c *Controller) processConfigMapsChanges(mapList *corev1.ConfigMapList) err
 	return nil
 }
 
+// deleteRules deletes the rules from logz.io
 func (c *Controller) deleteRules(rulesToDelete []grafana_alerts.GrafanaAlertRule, folderUid string) {
 	for _, rule := range rulesToDelete {
 		err := c.logzioAlertClient.DeleteGrafanaAlertRule(rule.Uid)
@@ -325,6 +322,7 @@ func (c *Controller) deleteRules(rulesToDelete []grafana_alerts.GrafanaAlertRule
 	}
 }
 
+// updateRules updates the rules in logz.io
 func (c *Controller) updateRules(rulesToUpdate []rulefmt.RuleNode, logzioRulesMap map[string]grafana_alerts.GrafanaAlertRule, folderUid string) {
 	for _, rule := range rulesToUpdate {
 		// Retrieve the existing GrafanaAlertRule to get the Uid.
@@ -343,6 +341,7 @@ func (c *Controller) updateRules(rulesToUpdate []rulefmt.RuleNode, logzioRulesMa
 	}
 }
 
+// writeRules writes the rules to logz.io
 func (c *Controller) writeRules(rulesToWrite []rulefmt.RuleNode, folderUid string) {
 	for _, rule := range rulesToWrite {
 		alert, err := c.generateGrafanaAlert(rule, folderUid)
@@ -351,11 +350,12 @@ func (c *Controller) writeRules(rulesToWrite []rulefmt.RuleNode, folderUid strin
 		}
 		_, err = c.logzioAlertClient.CreateGrafanaAlertRule(alert)
 		if err != nil {
-			klog.Warning("Error writing rule: %s - %s", alert.Title, err.Error())
+			klog.Warning("Error writing rule:", alert.Title, err.Error())
 		}
 	}
 }
 
+// generateGrafanaAlert generates a GrafanaAlertRule from a Prometheus rule
 func (c *Controller) generateGrafanaAlert(rule rulefmt.RuleNode, folderUid string) (grafana_alerts.GrafanaAlertRule, error) {
 	// Create an instance of the Prometheus query.
 	query := PrometheusQuery{
@@ -372,7 +372,7 @@ func (c *Controller) generateGrafanaAlert(rule rulefmt.RuleNode, folderUid strin
 		DatasourceUid: c.rulesDataSource,
 		Model:         model,
 		RefId:         refId,
-		QueryType:     "query",
+		QueryType:     queryType,
 		RelativeTimeRange: grafana_alerts.RelativeTimeRangeObj{
 			From: 300,
 			To:   0,
@@ -398,7 +398,7 @@ func (c *Controller) generateGrafanaAlert(rule rulefmt.RuleNode, folderUid strin
 	return grafanaAlert, nil
 }
 
-// get the cm on the workqueue
+// enqueueConfigMap get the cm on the workqueue
 func (c *Controller) enqueueConfigMap(obj interface{}) {
 	var key string
 	var err error
@@ -409,7 +409,8 @@ func (c *Controller) enqueueConfigMap(obj interface{}) {
 	c.workqueue.Add(key)
 }
 
-func (c *Controller) buildFinalConfig(mapList *corev1.ConfigMapList) *[]rulefmt.RuleNode {
+// getClusterAlertRules builds a list of rules from all the configmaps in the cluster
+func (c *Controller) getClusterAlertRules(mapList *corev1.ConfigMapList) *[]rulefmt.RuleNode {
 	var finalRules []rulefmt.RuleNode
 	for _, cm := range mapList.Items {
 		if c.isRuleConfigMap(&cm) {
@@ -422,7 +423,9 @@ func (c *Controller) buildFinalConfig(mapList *corev1.ConfigMapList) *[]rulefmt.
 	}
 	return &finalRules
 }
-func (c *Controller) getLogzioPrometheusAlerts(folderUid string) (*[]grafana_alerts.GrafanaAlertRule, error) {
+
+// getLogzioGrafanaAlerts builds a list of rules from all logz.io
+func (c *Controller) getLogzioGrafanaAlerts(folderUid string) (*[]grafana_alerts.GrafanaAlertRule, error) {
 	alertRules, ListLogzioRulesErr := c.logzioAlertClient.ListGrafanaAlertRules()
 	if ListLogzioRulesErr != nil {
 		return nil, ListLogzioRulesErr
@@ -437,6 +440,7 @@ func (c *Controller) getLogzioPrometheusAlerts(folderUid string) (*[]grafana_ale
 	return &alertsInFolder, nil
 }
 
+// findOrCreatePrometheusAlertsFolder tries to find the prometheus alerts folder in logz.io, if it does not exist it creates it.
 func (c *Controller) findOrCreatePrometheusAlertsFolder() (string, error) {
 	folders, err := c.logzioFolderClient.ListGrafanaFolders()
 	if err != nil {
@@ -460,6 +464,7 @@ func (c *Controller) findOrCreatePrometheusAlertsFolder() (string, error) {
 	return grafanaFolder.Uid, nil
 }
 
+// extractValues extracts the rules from the configmap, and validates them
 func (c *Controller) extractValues(cm *corev1.ConfigMap) []rulefmt.RuleNode {
 
 	fallbackNameStub := createNameStub(cm)
@@ -504,6 +509,7 @@ func (c *Controller) extractValues(cm *corev1.ConfigMap) []rulefmt.RuleNode {
 	return toalRules
 }
 
+// extractRules extracts the rules from the configmap key
 func (c *Controller) extractRules(value string) (error, rulefmt.RuleNode) {
 	rule := rulefmt.RuleNode{}
 	err := yaml.Unmarshal([]byte(value), &rule)
@@ -543,6 +549,7 @@ func (c *Controller) compareAlertRules(k8sRulesMap map[string]rulefmt.RuleNode, 
 	return toAdd, toUpdate, toDelete
 }
 
+// isRuleConfigMap checks if the configmap is a rule configmap
 func (c *Controller) isRuleConfigMap(cm *corev1.ConfigMap) bool {
 	if cm == nil {
 		return false
@@ -558,6 +565,7 @@ func (c *Controller) isRuleConfigMap(cm *corev1.ConfigMap) bool {
 	return false
 }
 
+// haveConfigMapsChanged checks if the configmaps have changed
 func (c *Controller) haveConfigMapsChanged(mapList *corev1.ConfigMapList) bool {
 	changes := false
 	for _, cm := range mapList.Items {
@@ -579,6 +587,7 @@ func (c *Controller) haveConfigMapsChanged(mapList *corev1.ConfigMapList) bool {
 	return changes
 }
 
+// recordEventOnConfigMap records an event on the configmap
 func (c *Controller) recordEventOnConfigMap(cm *corev1.ConfigMap, eventtype, reason, msg string) {
 	c.recorder.Event(cm, eventtype, reason, msg)
 	if eventtype == corev1.EventTypeWarning {
