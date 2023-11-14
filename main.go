@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/logzio/prometheus-alerts-migrator/controller"
@@ -19,6 +20,7 @@ type Config struct {
 	LogzioAPIURL   string
 	RulesDS        string
 	EnvID          string
+	WorkerCount    int
 }
 
 // NewConfig creates a Config struct, populating it with values from command-line flags and environment variables.
@@ -30,6 +32,7 @@ func NewConfig() *Config {
 	logzioAPIURLFlag := flag.String("logzio-api-url", "https://api.logz.io", "LOGZIO API URL")
 	rulesDSFlag := flag.String("rules-ds", "", "name of the data source for the alert rules")
 	envIDFlag := flag.String("env-id", "my-env", "environment identifier, usually cluster name")
+	workerCountFlag := flag.Int("workers", 2, "number of workers to use for the controller")
 
 	// Parse the flags
 	flag.Parse()
@@ -56,6 +59,11 @@ func NewConfig() *Config {
 	if annotation == "" {
 		klog.Fatal("No ConfigMap annotation provided")
 	}
+	workerCountStr := getEnvWithFallback("WORKERS_COOUNT", strconv.Itoa(*workerCountFlag))
+	workerCount, err := strconv.Atoi(workerCountStr)
+	if err != nil {
+		workerCount = 2 // default value
+	}
 
 	return &Config{
 		Annotation:     annotation,
@@ -63,6 +71,7 @@ func NewConfig() *Config {
 		LogzioAPIURL:   logzioAPIURL,
 		RulesDS:        rulesDS,
 		EnvID:          envID,
+		WorkerCount:    workerCount,
 	}
 }
 
@@ -82,6 +91,7 @@ func main() {
 	klog.Infof("Environment ID: %s\n", config.EnvID)
 	klog.Infof("Logzio api url: %s\n", config.LogzioAPIURL)
 	klog.Infof("Logzio rules data source: %s\n", config.RulesDS)
+	klog.Infof("Number of workers: %d\n", config.WorkerCount)
 
 	// set up signals so we handle the first shutdown signal gracefully
 	stopCh := signals.SetupSignalHandler()
@@ -102,7 +112,7 @@ func main() {
 
 	kubeInformerFactory.Start(stopCh)
 
-	if err = c.Run(2, stopCh); err != nil {
+	if err = c.Run(config.WorkerCount, stopCh); err != nil {
 		klog.Fatalf("Error running controller: %s", err)
 	}
 }
