@@ -8,26 +8,24 @@ metadata:
   annotations:
     prometheus.io/kube-rules: "true"
 data:
-  all_instances_down_otel_collector: |
-    alert: Opentelemetry_Collector_Down
-    expr: sum(up{app="opentelemetry-collector", job="kubernetes-pods"}) == 0 or absent(up{app="opentelemetry-collector", job="kubernetes-pods"}) > 0
-    for: 4m
+  all_instances_down_otel_collector_yotams: |
+    alert: Opentelemetry_Collector_Downq
+    expr: sum(up{app="opentelemetry-collectord", job="kubernetes-pods"}) == 0 or absent(up{app="opentelemetry-collector", job="kubernetes-pods"}) > 0
+    for: 5m
     labels:
       team: "sre"
       severity: "major"
     annotations:
-      dashboard: "https://grafana.tooling-production.poppulo-tooling.com/d/BKf2sowmj/opentelemetry-collector?orgId=1&refresh=10s&var-datasource=GRAFANA-PROMETHEUS&var-minstep=%24__auto_interval_minstep&var-receiver=All&var-processor=All&var-exporter=All&var-app=splunk-otel-collector&from=1676453659364&to=1676475259364"
-      description: "The OpenTelemetry collector has been down for more than 3 minutes"
+      description: "The OpenTelemetry collector has been down for more than 3 minutes yotam"
       causes: "Service is most likely down or fails healthchecks"
-  all_instances_down_splunk_collector: |
+  all_instances_down_splunk_collectors: |
     alert: Splunk_Collector_Down
     expr: sum(up{app="splunk-otel-collector", job="kubernetes-pods"}) == 0 or absent(up{app="splunk-otel-collector", job="kubernetes-pods"}) > 0
-    for: 3m
+    for: 5m
     labels:
       team: "sre"
-      severity: "major"
+      severity: "majors"
     annotations:
-      dashboard: "https://grafana.tooling-production.poppulo-tooling.com/d/BKf2sowmj/opentelemetry-collector?orgId=1&refresh=10s&var-datasource=GRAFANA-PROMETHEUS&var-minstep=%24__auto_interval_minstep&var-receiver=All&var-processor=All&var-exporter=All&var-app=splunk-otel-collector&from=1676453659364&to=1676475259364"
       description: "The Splunk OpenTelemetry collector has been down for more than 3 minutes"
       causes: "Service is most likely down or fails healthchecks"
   receiver_metrics_points_refused_splunk: |
@@ -38,8 +36,7 @@ data:
       team: "sre"
       severity: "major"
     annotations:
-      dashboard: "https://grafana.tooling-production.poppulo-tooling.com/d/BKf2sowmj/opentelemetry-collector?orgId=1&refresh=10s&var-datasource=GRAFANA-PROMETHEUS&var-minstep=%24__auto_interval_minstep&var-receiver=All&var-processor=All&var-exporter=All&var-app=splunk-otel-collector&from=1676453659364&to=1676475259364"
-      description: "High number of refused metric points in OpenTelemetry collector receiver"
+      description: "High number of refused metric points in OpenTelemetry collector receiver fsdfdsff"
       causes: "Service is most likely unhealthy, investigate the metric and identify which is the affected transport protocol (http, grpc, otlp, etc)"
 
 
