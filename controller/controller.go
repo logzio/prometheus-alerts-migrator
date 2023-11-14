@@ -568,6 +568,10 @@ func (c *Controller) isRuleConfigMap(cm *corev1.ConfigMap) bool {
 // haveConfigMapsChanged checks if the configmaps have changed
 func (c *Controller) haveConfigMapsChanged(mapList *corev1.ConfigMapList) bool {
 	changes := false
+	if mapList == nil {
+		klog.Warning("mapList is nil")
+		return false
+	}
 	for _, cm := range mapList.Items {
 		if c.isRuleConfigMap(&cm) {
 			stub := createNameStub(&cm)

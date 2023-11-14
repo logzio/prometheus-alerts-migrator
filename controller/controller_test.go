@@ -15,6 +15,8 @@ import (
 	"time"
 )
 
+const annotation = "test-annotation"
+
 func generateTestController() *Controller {
 	cfg, err := GetConfig()
 	if err != nil {
@@ -26,7 +28,7 @@ func generateTestController() *Controller {
 		klog.Fatalf("Error building kubernetes clientset: %s", err)
 	}
 	kubeInformerFactory := informers.NewSharedInformerFactory(kubeClient, 0)
-	annotation := "anno"
+	annotation := "test-annotation"
 	c := NewController(kubeClient, kubeInformerFactory.Core().V1().ConfigMaps(), &annotation, "token", "url", "ds", "env")
 	return c
 }
@@ -297,6 +299,157 @@ func TestExtractValues(t *testing.T) {
 			rules := c.extractValues(tc.configMap)
 			if len(rules) != tc.expectedRules {
 				t.Errorf("extractValues() for %v - expected %d rules, got %d", tc.name, tc.expectedRules, len(rules))
+			}
+		})
+	}
+}
+
+func TestIsRuleConfigMap(t *testing.T) {
+	c := generateTestController()
+	testCases := []struct {
+		name      string
+		configMap *v1.ConfigMap
+		expected  bool
+	}{
+		{
+			name:      "nil configmap",
+			configMap: nil,
+			expected:  false,
+		},
+		{
+			name: "configmap without annotations",
+			configMap: &v1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "configmap with unrelated annotations",
+			configMap: &v1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						"unrelated/annotation": "true",
+					},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "configmap with interesting annotation",
+			configMap: &v1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						"test-annotation": "true",
+					},
+				},
+			},
+			expected: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if result := c.isRuleConfigMap(tc.configMap); result != tc.expected {
+				t.Errorf("isRuleConfigMap() for %v - got %v, want %v", tc.name, result, tc.expected)
+			}
+		})
+	}
+}
+
+func TestHaveConfigMapsChanged(t *testing.T) {
+	c := generateTestController()
+	// Seed the resourceVersionMap with a known ConfigMap version for comparison.
+	knownConfigMap := v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "known",
+			Namespace:       "default",
+			ResourceVersion: "12345",
+			Annotations: map[string]string{
+				annotation: "true",
+			},
+		},
+	}
+	c.resourceVersionMap[createNameStub(&knownConfigMap)] = "12345"
+
+	testCases := []struct {
+		name     string
+		mapList  *v1.ConfigMapList
+		expected bool
+	}{
+		{
+			name: "ConfigMapList with unchanged rule ConfigMap",
+			mapList: &v1.ConfigMapList{
+				Items: []v1.ConfigMap{knownConfigMap},
+			},
+			expected: false,
+		},
+		{
+			name:     "nil ConfigMapList",
+			mapList:  nil,
+			expected: false,
+		},
+		{
+			name:     "empty ConfigMapList",
+			mapList:  &v1.ConfigMapList{},
+			expected: false,
+		},
+		{
+			name: "ConfigMapList with non-rule ConfigMaps",
+			mapList: &v1.ConfigMapList{
+				Items: []v1.ConfigMap{
+					{
+						ObjectMeta: metav1.ObjectMeta{Name: "non-rule"},
+					},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "ConfigMapList with new rule ConfigMap",
+			mapList: &v1.ConfigMapList{
+				Items: []v1.ConfigMap{
+					knownConfigMap,
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:            "new",
+							Namespace:       "default",
+							ResourceVersion: "67890",
+							Annotations: map[string]string{
+								annotation: "true",
+							},
+						},
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "ConfigMapList with changed rule ConfigMap",
+			mapList: &v1.ConfigMapList{
+				Items: []v1.ConfigMap{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:            "known",
+							Namespace:       "default",
+							ResourceVersion: "67890",
+							Annotations: map[string]string{
+								annotation: "true",
+							},
+						},
+					},
+				},
+			},
+			expected: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := c.haveConfigMapsChanged(tc.mapList)
+			if result != tc.expected {
+				t.Errorf("haveConfigMapsChanged() for %v - got %v, want %v", tc.name, result, tc.expected)
 			}
 		})
 	}
