@@ -2,6 +2,11 @@ package controller
 
 import (
 	"fmt"
+	"reflect"
+	"strings"
+	"testing"
+	"time"
+
 	"github.com/logzio/logzio_terraform_client/grafana_alerts"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/rulefmt"
@@ -11,10 +16,6 @@ import (
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog"
-	"reflect"
-	"strings"
-	"testing"
-	"time"
 )
 
 const annotation = "test-annotation"

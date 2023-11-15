@@ -6,11 +6,12 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/logzio/prometheus-alerts-migrator/controller"
-	"github.com/logzio/prometheus-alerts-migrator/pkg/signals"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog"
+
+	"github.com/logzio/prometheus-alerts-migrator/controller"
+	"github.com/logzio/prometheus-alerts-migrator/pkg/signals"
 )
 
 // Config holds all the configuration needed for the application to run.

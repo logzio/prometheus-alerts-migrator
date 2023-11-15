@@ -2,18 +2,19 @@ package controller
 
 import (
 	"fmt"
-	"github.com/logzio/logzio_terraform_client/grafana_alerts"
-	"github.com/prometheus/prometheus/model/rulefmt"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
-	"k8s.io/client-go/util/homedir"
 	"math/rand"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strconv"
 	"time"
+
+	"github.com/logzio/logzio_terraform_client/grafana_alerts"
+	"github.com/prometheus/prometheus/model/rulefmt"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/util/homedir"
 )
 
 // borrowed from here https://stackoverflow.com/questions/22892120/how-to-generate-a-random-string-of-a-fixed-length-in-go
