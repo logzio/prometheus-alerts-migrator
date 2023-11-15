@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -493,16 +492,70 @@ func TestHaveConfigMapsChanged(t *testing.T) {
 	}
 }
 
-// MockLogzioAlertClient simulates the Logz.io alert client.
-type MockLogzioAlertClient struct {
-	alerts map[string]grafana_alerts.GrafanaAlertRule // Simulated internal state of alerts
-}
-
-// DeleteGrafanaAlertRule simulates the deletion of a Grafana alert rule.
-func (client *MockLogzioAlertClient) DeleteGrafanaAlertRule(uid string) error {
-	if _, exists := client.alerts[uid]; !exists {
-		return fmt.Errorf("alert with UID %s not found", uid) // Simulate a deletion error
+func TestCompareAlertRules(t *testing.T) {
+	c := generateTestController()
+	var data []*grafana_alerts.GrafanaAlertQuery
+	dataMap := make(map[string]interface{})
+	dataMap["expr"] = "expr"
+	dataQuery := &grafana_alerts.GrafanaAlertQuery{
+		Model: dataMap,
 	}
-	delete(client.alerts, uid) // Simulate successful deletion
-	return nil
+	data = append(data, dataQuery)
+	testCases := []struct {
+		name                string
+		k8sRulesMap         map[string]rulefmt.RuleNode
+		logzioRulesMap      map[string]grafana_alerts.GrafanaAlertRule
+		expectedToAddLen    int
+		expectedToUpdateLen int
+		expectedToDeleteLen int
+	}{
+		{
+			name: "rules to add, update and delete",
+			k8sRulesMap: map[string]rulefmt.RuleNode{
+				"rule1": {Alert: yaml.Node{Value: "rule1"}}, // Should be added
+				"rule2": {Alert: yaml.Node{Value: "rule2"}}, // Should be updated (assuming it's different in Logz.io)
+			},
+			logzioRulesMap: map[string]grafana_alerts.GrafanaAlertRule{
+				"rule2": {Title: "rule2-different"}, // Exists in Kubernetes but is different
+				"rule3": {Title: "rule3"},           // Should be deleted (not in Kubernetes)
+			},
+			expectedToAddLen:    1,
+			expectedToUpdateLen: 1,
+			expectedToDeleteLen: 1,
+		},
+		{
+			name: "no changes",
+			k8sRulesMap: map[string]rulefmt.RuleNode{
+				"rule1": {
+					Alert: yaml.Node{Value: "rule1"},
+					Expr:  yaml.Node{Value: "expr"},
+				},
+			},
+			logzioRulesMap: map[string]grafana_alerts.GrafanaAlertRule{
+				"rule1": {
+					Title: "rule1",
+					Data:  data,
+				},
+			},
+			expectedToAddLen:    0,
+			expectedToUpdateLen: 0,
+			expectedToDeleteLen: 0,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			toAdd, toUpdate, toDelete := c.compareAlertRules(tc.k8sRulesMap, tc.logzioRulesMap)
+
+			if !reflect.DeepEqual(len(toAdd), tc.expectedToAddLen) {
+				t.Errorf("Test %s failed: expected to add %d rules, got %d", tc.name, tc.expectedToAddLen, len(toAdd))
+			}
+			if !reflect.DeepEqual(len(toUpdate), tc.expectedToUpdateLen) {
+				t.Errorf("Test %s failed: expected to update %d rules, got %d", tc.name, tc.expectedToUpdateLen, len(toUpdate))
+			}
+			if !reflect.DeepEqual(len(toDelete), tc.expectedToDeleteLen) {
+				t.Errorf("Test %s failed: expected to delete %d rules, got %d", tc.name, tc.expectedToDeleteLen, len(toDelete))
+			}
+		})
+	}
 }
