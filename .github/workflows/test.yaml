@@ -1,0 +1,26 @@
+name: Go Tests
+
+on:
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  test:
+    name: Run Go tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.19'
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v4
+
+      - name: Get dependencies
+        run: go mod download
+
+      - name: Run tests
+        run: go test ./... -cover
+
