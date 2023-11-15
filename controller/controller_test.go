@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"fmt"
 	"github.com/logzio/logzio_terraform_client/grafana_alerts"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/rulefmt"
@@ -11,6 +12,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -31,6 +33,41 @@ func generateTestController() *Controller {
 	annotation := "test-annotation"
 	c := NewController(kubeClient, kubeInformerFactory.Core().V1().ConfigMaps(), &annotation, "token", "url", "ds", "env")
 	return c
+}
+
+func TestGenerateRandomString(t *testing.T) {
+	testCases := []struct {
+		name   string
+		length int
+	}{
+		{"length 10", 10},
+		{"length 0", 0},
+		{"negative length", -1},
+		{"large length", 1000},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := generateRandomString(tc.length)
+
+			if len(result) != tc.length && tc.length >= 0 {
+				t.Errorf("Expected string of length %d, got string of length %d", tc.length, len(result))
+			}
+
+			for _, char := range result {
+				if !strings.Contains(letterBytes, string(char)) {
+					t.Errorf("generateRandomString() produced a string with invalid character: %v", char)
+				}
+			}
+
+			if tc.length > 0 {
+				otherResult := generateRandomString(tc.length)
+				if result == otherResult {
+					t.Errorf("generateRandomString() does not seem to produce random strings")
+				}
+			}
+		})
+	}
 }
 
 func TestParseDuration(t *testing.T) {
@@ -453,4 +490,18 @@ func TestHaveConfigMapsChanged(t *testing.T) {
 			}
 		})
 	}
+}
+
+// MockLogzioAlertClient simulates the Logz.io alert client.
+type MockLogzioAlertClient struct {
+	alerts map[string]grafana_alerts.GrafanaAlertRule // Simulated internal state of alerts
+}
+
+// DeleteGrafanaAlertRule simulates the deletion of a Grafana alert rule.
+func (client *MockLogzioAlertClient) DeleteGrafanaAlertRule(uid string) error {
+	if _, exists := client.alerts[uid]; !exists {
+		return fmt.Errorf("alert with UID %s not found", uid) // Simulate a deletion error
+	}
+	delete(client.alerts, uid) // Simulate successful deletion
+	return nil
 }

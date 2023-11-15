@@ -535,7 +535,6 @@ func (c *Controller) compareAlertRules(k8sRulesMap map[string]rulefmt.RuleNode, 
 			// Alert exists but differs, needs to be updated.
 			toUpdate = append(toUpdate, k8sRule)
 		}
-		// If alert exists and is the same, no action needed.
 	}
 
 	// Determine rules to delete.

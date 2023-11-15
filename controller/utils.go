@@ -18,6 +18,9 @@ import (
 
 // borrowed from here https://stackoverflow.com/questions/22892120/how-to-generate-a-random-string-of-a-fixed-length-in-go
 func generateRandomString(n int) string {
+	if n <= 0 {
+		return "" // Return an empty string for non-positive lengths
+	}
 	b := make([]byte, n)
 	src := rand.NewSource(time.Now().UnixNano())
 	for i, cache, remain := n-1, src.Int63(), letterIdxMax; i >= 0; {
