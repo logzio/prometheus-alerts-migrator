@@ -105,10 +105,16 @@ func NewController(
 	eventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: kubeclientset.CoreV1().Events("")})
 	recorder := eventBroadcaster.NewRecorder(scheme.Scheme, corev1.EventSource{Component: controllerAgentName})
 
-	// TODO: Handle errors
-	logzioAlertClient, _ := grafana_alerts.New(logzioApiToken, logzioApiUrl)
-	logzioFolderClient, _ := grafana_folders.New(logzioApiToken, logzioApiUrl)
-
+	logzioAlertClient, err := grafana_alerts.New(logzioApiToken, logzioApiUrl)
+	if err != nil {
+		klog.Errorf("Failed to create logzio alert client: %v", err)
+		return nil
+	}
+	logzioFolderClient, err := grafana_folders.New(logzioApiToken, logzioApiUrl)
+	if err != nil {
+		klog.Errorf("Failed to create logzio folder client: %v", err)
+		return nil
+	}
 	controller := &Controller{
 		kubeclientset:         kubeclientset,
 		configmapsLister:      configmapInformer.Lister(),

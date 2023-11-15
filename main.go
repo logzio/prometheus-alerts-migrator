@@ -109,7 +109,9 @@ func main() {
 	kubeInformerFactory := informers.NewSharedInformerFactory(kubeClient, time.Second*30)
 
 	c := controller.NewController(kubeClient, kubeInformerFactory.Core().V1().ConfigMaps(), &config.Annotation, config.LogzioAPIToken, config.LogzioAPIURL, config.RulesDS, config.EnvID)
-
+	if c == nil {
+		klog.Fatal("Error creating controller")
+	}
 	kubeInformerFactory.Start(stopCh)
 
 	if err = c.Run(config.WorkerCount, stopCh); err != nil {
