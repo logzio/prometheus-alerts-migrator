@@ -1,0 +1,22 @@
+name: Format check
+
+on:
+  pull_request:
+    branches: [ master ]
+jobs:
+  fmt:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: echo
+        run: |
+          echo runing make format-components
+      - uses: actions/checkout@v4
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.19"
+      - name: go fmt
+        run: make format-components
