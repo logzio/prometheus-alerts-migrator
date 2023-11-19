@@ -33,7 +33,7 @@ func NewConfig() *Config {
 	logzioAPIURLFlag := flag.String("logzio-api-url", "https://api.logz.io", "LOGZIO API URL")
 	rulesDSFlag := flag.String("rules-ds", "", "name of the data source for the alert rules")
 	envIDFlag := flag.String("env-id", "my-env", "environment identifier, usually cluster name")
-	workerCountFlag := flag.Int("workers", 2, "number of workers to use for the controller")
+	workerCountFlag := flag.Int("workers", 2, "The number of workers to process the alerts")
 
 	// Parse the flags
 	flag.Parse()
