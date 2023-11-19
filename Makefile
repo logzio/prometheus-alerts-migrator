@@ -1,27 +1,12 @@
 IMAGE_NAME := prometheus-alerts-migrator
 IMAGE_TAG := v1.0.0-test
 DOCKER_REPO := logzio/$(IMAGE_NAME):$(IMAGE_TAG)
-K8S_NAMESPACE := monitoring
 
-# ALL_PKGS is used with 'go cover'
-ALL_PKGS := $(shell $(GOCMD) list $(sort $(dir $(ALL_SRC))))
-# All source code and documents. Used in spell check.
-ALL_SRC_AND_DOC := $(shell find $(ALL_PKG_DIRS) -name "*.md" -o -name "*.go" -o -name "*.yaml" \
-                                -not -path '*/third_party/*' \
-                                -type f | sort)
 
-MISSPELL=misspell -error
-MISSPELL_CORRECTION=misspell -w
-LINT=golangci-lint
-IMPI=impi
-
-.PHONY: docker-build
-docker-build:
-	docker build -t $(DOCKER_REPO) .
-
-.PHONY: docker-push
-docker-push:
-	docker push $(DOCKER_REPO)
+.PHONY: docker-buildx
+docker-buildx:
+	docker buildx create --use
+	docker buildx build --platform linux/amd64,linux/arm64 -t $(DOCKER_REPO) --push .
 
 .PHONY: run-local
 run-local:
