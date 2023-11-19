@@ -29,6 +29,10 @@ jobs:
           kind create cluster
           kubectl cluster-info
 
+      - name: Create namespace
+        run: |
+          kubectl create namespace alert-migrator-test
+
       - name: Get dependencies
         run: go mod download
 

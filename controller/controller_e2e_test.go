@@ -16,6 +16,8 @@ import (
 	"time"
 )
 
+const testNamespace = "alert-migrator-test"
+
 // deployConfigMaps deploys the provided ConfigMaps to the cluster
 func deployConfigMaps(clientset *kubernetes.Clientset, configs ...string) error {
 	for _, config := range configs {
@@ -82,7 +84,7 @@ func TestControllerE2E(t *testing.T) {
 	ctrl := NewController(clientset, kubeInformerFactory.Core().V1().ConfigMaps(), &anno, logzioAPIToken, logzioUrl, rulesDS, "integration-test")
 
 	// defer cleanup
-	defer cleanupTestCluster(clientset, "monitoring", "opentelemetry-rules", "opentelemetry-rules-2")
+	defer cleanupTestCluster(clientset, testNamespace, "opentelemetry-rules", "opentelemetry-rules-2")
 	kubeInformerFactory.Start(stopCh)
 	err = deployConfigMaps(clientset, "../testdata/cm.yml", "../testdata/cm2.yml")
 	if err != nil {

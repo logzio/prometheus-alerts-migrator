@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: opentelemetry-rules
-  namespace: monitoring
+  namespace: alert-migrator-test
   labels:
     app: prometheus
   annotations:
