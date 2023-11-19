@@ -294,13 +294,13 @@ func (c *Controller) processConfigMapsChanges(mapList *corev1.ConfigMapList) err
 	}
 	// Maps for efficient lookups by alert name.
 	rulesMap := make(map[string]rulefmt.RuleNode, len(*alertRules))
-	logzioRulesMap := make(map[string]grafana_alerts.GrafanaAlertRule, len(*logzioAlertRules))
+	logzioRulesMap := make(map[string]grafana_alerts.GrafanaAlertRule, len(logzioAlertRules))
 	// Process Kubernetes alerts into a map.
 	for _, alert := range *alertRules {
 		rulesMap[alert.Alert.Value] = alert
 	}
 	// Process Logz.io alerts into a map.
-	for _, alert := range *logzioAlertRules {
+	for _, alert := range logzioAlertRules {
 		logzioRulesMap[alert.Title] = alert
 	}
 	toAdd, toUpdate, toDelete := c.compareAlertRules(rulesMap, logzioRulesMap)
@@ -432,7 +432,7 @@ func (c *Controller) getClusterAlertRules(mapList *corev1.ConfigMapList) *[]rule
 }
 
 // getLogzioGrafanaAlerts builds a list of rules from all logz.io
-func (c *Controller) getLogzioGrafanaAlerts(folderUid string) (*[]grafana_alerts.GrafanaAlertRule, error) {
+func (c *Controller) getLogzioGrafanaAlerts(folderUid string) ([]grafana_alerts.GrafanaAlertRule, error) {
 	alertRules, ListLogzioRulesErr := c.logzioAlertClient.ListGrafanaAlertRules()
 	if ListLogzioRulesErr != nil {
 		return nil, ListLogzioRulesErr
@@ -444,7 +444,7 @@ func (c *Controller) getLogzioGrafanaAlerts(folderUid string) (*[]grafana_alerts
 			alertsInFolder = append(alertsInFolder, rule)
 		}
 	}
-	return &alertsInFolder, nil
+	return alertsInFolder, nil
 }
 
 // findOrCreatePrometheusAlertsFolder tries to find the prometheus alerts folder in logz.io, if it does not exist it creates it.
