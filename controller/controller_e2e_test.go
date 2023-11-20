@@ -11,6 +11,7 @@ import (
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
+	"log"
 	"os"
 	"testing"
 	"time"
@@ -61,6 +62,19 @@ func cleanupTestCluster(clientset *kubernetes.Clientset, namespace string, confi
 	return nil
 }
 
+func cleanupLogzioAlerts(ctl Controller) {
+	folderUid, err := ctl.findOrCreatePrometheusAlertsFolder()
+	if err != nil {
+		log.Fatalf("Failed to get logzio alerts folder uid: %v", err)
+	}
+	logzioAlerts, err := ctl.getLogzioGrafanaAlerts(folderUid)
+	if err != nil {
+		log.Fatalf("Failed to get logzio alerts: %v", err)
+	}
+	// defer cleanup
+	ctl.deleteRules(logzioAlerts, folderUid)
+}
+
 // TestControllerE2E is the main function that runs the end-to-end test
 func TestControllerE2E(t *testing.T) {
 	// Setup the test environment
@@ -84,7 +98,9 @@ func TestControllerE2E(t *testing.T) {
 	ctrl := NewController(clientset, kubeInformerFactory.Core().V1().ConfigMaps(), &anno, logzioAPIToken, logzioUrl, rulesDS, "integration-test")
 
 	// defer cleanup
+	defer cleanupLogzioAlerts(*ctrl)
 	defer cleanupTestCluster(clientset, testNamespace, "opentelemetry-rules", "opentelemetry-rules-2")
+
 	kubeInformerFactory.Start(stopCh)
 	err = deployConfigMaps(clientset, "../testdata/cm.yml", "../testdata/cm2.yml")
 	if err != nil {
@@ -107,8 +123,8 @@ func TestControllerE2E(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to get logzio alerts: %v", err)
 	}
-	// defer cleanup
-	defer ctrl.deleteRules(logzioAlerts, folderUid)
 	assert.Equal(t, 9, len(logzioAlerts))
+
+	// get some alert
 
 }
