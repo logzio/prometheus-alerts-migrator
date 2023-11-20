@@ -1,0 +1,76 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: opentelemetry-rules-2
+  namespace: alert-migrator-test
+  labels:
+    app: prometheus
+  annotations:
+    prometheus.io/kube-rules: "true"
+data:
+  receiver_spans_refused_splunk: |
+    alert: Refused_Metrics_Points_Splunk
+    expr: rate(otelcol_receiver_refused_spans{app="splunk-otel-collector"}[5m]) > 0
+    for: 5m
+    labels:
+      team: "sre"
+      severity: "major"
+    annotations:
+      dashboard: "https://grafana.tooling-production.poppulo-tooling.com/d/BKf2sowmj/opentelemetry-collector?orgId=1&refresh=10s&var-datasource=GRAFANA-PROMETHEUS&var-minstep=%24__auto_interval_minstep&var-receiver=All&var-processor=All&var-exporter=All&var-app=splunk-otel-collector&from=1676453659364&to=1676475259364"
+      description: "High number of refused spans in OpenTelemetry collector receiver (Splunk)"
+      causes: "Service is most likely unhealthy, investigate the metric and identify which is the affected receiver"
+  receiver_spans_refused_collector: |
+    alert: Refused_Metrics_Points_Opentelemetry_Collector
+    expr: rate(otelcol_receiver_refused_spans{app="opentelemetry-collector"}[5m]) > 0
+    for: 5m
+    labels:
+      team: "sre"
+      severity: "major"
+    annotations:
+      dashboard: "https://grafana.tooling-production.poppulo-tooling.com/d/BKf2sowmj/opentelemetry-collector?orgId=1&refresh=10s&var-datasource=GRAFANA-PROMETHEUS&var-minstep=%24__auto_interval_minstep&var-receiver=All&var-processor=All&var-exporter=All&var-app=splunk-otel-collector&from=1676453659364&to=1676475259364"
+      description: "High number of refused spans points in OpenTelemetry collector receiver (Splunk)"
+      causes: "Service is most likely unhealthy, investigate the metric and identify which is the affected receiver"
+  exporter_metrics_failed_splunk: |
+    alert: Refused_Metrics_Points_Splunk
+    expr: rate(otelcol_exporter_enqueue_failed_metric_points{app="splunk-otel-collector"}[5m]) > 5
+    for: 5m
+    labels:
+      team: "sre"
+      severity: "major"
+    annotations:
+      dashboard: "https://grafana.tooling-production.poppulo-tooling.com/d/BKf2sowmj/opentelemetry-collector?orgId=1&refresh=10s&var-datasource=GRAFANA-PROMETHEUS&var-minstep=%24__auto_interval_minstep&var-receiver=All&var-processor=All&var-exporter=All&var-app=splunk-otel-collector&from=1676453659364&to=1676475259364"
+      description: "The Splunk OpenTelemetry collector is failing to export metrics with the following protocol {% raw %}{{ $labels.exporter }}{% endraw %}"
+      causes: "Service is most likely unhealthy"
+  exporter_metrics_failed_collector: |
+    alert: Refused_Metrics_Points_Opentelemetry_Collector
+    expr: rate(otelcol_exporter_enqueue_failed_metric_points{app="opentelemetry-collector"}[5m]) > 0
+    for: 5m
+    labels:
+      team: "sre"
+      severity: "major"
+    annotations:
+      dashboard: "https://grafana.tooling-production.poppulo-tooling.com/d/BKf2sowmj/opentelemetry-collector?orgId=1&refresh=10s&var-datasource=GRAFANA-PROMETHEUS&var-minstep=%24__auto_interval_minstep&var-receiver=All&var-processor=All&var-exporter=All&var-app=splunk-otel-collector&from=1676453659364&to=1676475259364"
+      description: "The OpenTelemetry collector is failing to export metrics with the following protocol {% raw %}{{ $labels.exporter }}{% endraw %}"
+      causes: "Service is most likely unhealthy"
+  exporter_spans_failed_splunk: |
+    alert: Refused_Metrics_Points_Splunk
+    expr: rate(otelcol_exporter_enqueue_failed_spans{app="splunk-otel-collector"}[5m]) > 5
+    for: 5m
+    labels:
+      team: "sre"
+      severity: "major"
+    annotations:
+      dashboard: "https://grafana.tooling-production.poppulo-tooling.com/d/BKf2sowmj/opentelemetry-collector?orgId=1&refresh=10s&var-datasource=GRAFANA-PROMETHEUS&var-minstep=%24__auto_interval_minstep&var-receiver=All&var-processor=All&var-exporter=All&var-app=splunk-otel-collector&from=1676453659364&to=1676475259364"
+      description: "The Splunk OpenTelemetry collector is failing to export spans with the following protocol {% raw %}{{ $labels.exporter }}{% endraw %}"
+      causes: "Service is most likely unhealthy"
+  exporter_spans_failed_collector: |
+    alert: Refused_Metrics_Points_Opentelemetry_Collector
+    expr: rate(otelcol_exporter_enqueue_failed_spans{app="opentelemetry-collector"}[5m]) > 0
+    for: 5m
+    labels:
+      team: "sre"
+      severity: "major"
+    annotations:
+      dashboard: "https://grafana.tooling-production.poppulo-tooling.com/d/BKf2sowmj/opentelemetry-collector?orgId=1&refresh=10s&var-datasource=GRAFANA-PROMETHEUS&var-minstep=%24__auto_interval_minstep&var-receiver=All&var-processor=All&var-exporter=All&var-app=splunk-otel-collector&from=1676453659364&to=1676475259364"
+      description: "The OpenTelemetry collector is failing to export spans with the following protocol {% raw %}{{ $labels.exporter }}{% endraw %}"
+      causes: "Service is most likely unhealthy"
