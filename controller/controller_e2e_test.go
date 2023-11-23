@@ -99,7 +99,7 @@ func TestControllerE2E(t *testing.T) {
 
 	// defer cleanup
 	defer cleanupLogzioAlerts(*ctrl)
-	defer cleanupTestCluster(clientset, testNamespace, "opentelemetry-rules", "opentelemetry-rules-2")
+	defer cleanupTestCluster(clientset, testNamespace, "opentelemetry-rules", "infrastructure-rules")
 
 	kubeInformerFactory.Start(stopCh)
 	err = deployConfigMaps(clientset, "../testdata/cm.yml", "../testdata/cm2.yml")
@@ -123,8 +123,6 @@ func TestControllerE2E(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to get logzio alerts: %v", err)
 	}
-	assert.Equal(t, 9, len(logzioAlerts))
-
-	// get some alert
+	assert.Equal(t, 14, len(logzioAlerts))
 
 }

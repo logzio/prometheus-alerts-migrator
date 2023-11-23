@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -29,9 +30,12 @@ func generateTestController() *Controller {
 	if err != nil {
 		klog.Fatalf("Error building kubernetes clientset: %s", err)
 	}
+	logzioUrl := os.Getenv("LOGZIO_API_URL")
+	logzioAPIToken := os.Getenv("LOGZIO_API_TOKEN")
+	rulesDS := os.Getenv("RULES_DS")
 	kubeInformerFactory := informers.NewSharedInformerFactory(kubeClient, 0)
 	annotation := "test-annotation"
-	c := NewController(kubeClient, kubeInformerFactory.Core().V1().ConfigMaps(), &annotation, "token", "url", "ds", "env")
+	c := NewController(kubeClient, kubeInformerFactory.Core().V1().ConfigMaps(), &annotation, logzioAPIToken, logzioUrl, rulesDS, "integration-test")
 	return c
 }
 
@@ -223,7 +227,6 @@ func TestIsAlertEqual(t *testing.T) {
 
 func TestGenerateGrafanaAlert(t *testing.T) {
 	ctrl := generateTestController()
-
 	// Define common rule parts for reuse in test cases
 	baseRule := rulefmt.RuleNode{
 		Alert:       yaml.Node{Value: "TestAlert"},
