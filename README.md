@@ -63,3 +63,6 @@ data:
 ## Changelog
 - v1.0.0
   - initial release 
+- v1.0.1
+  - Update `logzio_terraform_client`: `1.18.0` -> `1.19.0`
+  - Use data source uid instead of name
