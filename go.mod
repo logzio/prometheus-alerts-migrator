@@ -3,7 +3,7 @@ module github.com/logzio/prometheus-alerts-migrator
 go 1.19
 
 require (
-	github.com/logzio/logzio_terraform_client v1.18.0
+	github.com/logzio/logzio_terraform_client v1.19.0
 	github.com/prometheus/common v0.44.0
 	github.com/prometheus/prometheus v0.47.2
 	github.com/stretchr/testify v1.8.4

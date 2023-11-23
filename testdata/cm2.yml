@@ -1,76 +1,81 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: opentelemetry-rules-2
+  name: infrastructure-rules
   namespace: alert-migrator-test
   labels:
     app: prometheus
   annotations:
     prometheus.io/kube-rules: "true"
 data:
-  receiver_spans_refused_splunk: |
-    alert: Refused_Metrics_Points_Splunk
-    expr: rate(otelcol_receiver_refused_spans{app="splunk-otel-collector"}[5m]) > 0
+  high_latency: |
+    alert: High_Latency
+    expr: histogram_quantile(0.95, sum(rate(otelcol_process_latency_seconds_bucket{app="test-otel-collector"}[5m])) by (le)) > 0.6
     for: 5m
     labels:
       team: "sre"
-      severity: "major"
+      severity: "critical"
+      purpose: "test"
     annotations:
-      dashboard: "https://grafana.tooling-production.poppulo-tooling.com/d/BKf2sowmj/opentelemetry-collector?orgId=1&refresh=10s&var-datasource=GRAFANA-PROMETHEUS&var-minstep=%24__auto_interval_minstep&var-receiver=All&var-processor=All&var-exporter=All&var-app=splunk-otel-collector&from=1676453659364&to=1676475259364"
-      description: "High number of refused spans in OpenTelemetry collector receiver (Splunk)"
-      causes: "Service is most likely unhealthy, investigate the metric and identify which is the affected receiver"
-  receiver_spans_refused_collector: |
-    alert: Refused_Metrics_Points_Opentelemetry_Collector
-    expr: rate(otelcol_receiver_refused_spans{app="opentelemetry-collector"}[5m]) > 0
+      description: "95th percentile latency is above 600ms for the test OpenTelemetry collector test"
+      summary: "High 95th percentile latency observed in test environment"
+
+  memory_usage: |
+    alert: High_Memory_Usage
+    expr: sum by (instance) (container_memory_usage_bytes{container="otel-collector-test"}) / sum by (instance) (container_spec_memory_limit_bytes{container="otel-collector-test"}) > 0.7
     for: 5m
     labels:
       team: "sre"
-      severity: "major"
+      severity: "warning"
+      purpose: "test"
     annotations:
-      dashboard: "https://grafana.tooling-production.poppulo-tooling.com/d/BKf2sowmj/opentelemetry-collector?orgId=1&refresh=10s&var-datasource=GRAFANA-PROMETHEUS&var-minstep=%24__auto_interval_minstep&var-receiver=All&var-processor=All&var-exporter=All&var-app=splunk-otel-collector&from=1676453659364&to=1676475259364"
-      description: "High number of refused spans points in OpenTelemetry collector receiver (Splunk)"
-      causes: "Service is most likely unhealthy, investigate the metric and identify which is the affected receiver"
-  exporter_metrics_failed_splunk: |
-    alert: Refused_Metrics_Points_Splunk
-    expr: rate(otelcol_exporter_enqueue_failed_metric_points{app="splunk-otel-collector"}[5m]) > 5
+      description: "Memory usage for the test OpenTelemetry collector is above 70% of the limit"
+      summary: "High memory usage detected for the test OpenTelemetry collector"
+
+  cpu_usage: |
+    alert: High_CPU_Usage
+    expr: sum(rate(container_cpu_usage_seconds_total{container="otel-collector-test"}[5m])) by (instance) > 0.9
     for: 5m
     labels:
       team: "sre"
-      severity: "major"
+      severity: "warning"
+      purpose: "test"
     annotations:
-      dashboard: "https://grafana.tooling-production.poppulo-tooling.com/d/BKf2sowmj/opentelemetry-collector?orgId=1&refresh=10s&var-datasource=GRAFANA-PROMETHEUS&var-minstep=%24__auto_interval_minstep&var-receiver=All&var-processor=All&var-exporter=All&var-app=splunk-otel-collector&from=1676453659364&to=1676475259364"
-      description: "The Splunk OpenTelemetry collector is failing to export metrics with the following protocol {% raw %}{{ $labels.exporter }}{% endraw %}"
-      causes: "Service is most likely unhealthy"
-  exporter_metrics_failed_collector: |
-    alert: Refused_Metrics_Points_Opentelemetry_Collector
-    expr: rate(otelcol_exporter_enqueue_failed_metric_points{app="opentelemetry-collector"}[5m]) > 0
+      description: "CPU usage for the test OpenTelemetry collector is above 90%"
+      summary: "High CPU usage detected for the test OpenTelemetry collector"
+
+  packet_loss: |
+    alert: Packet_Loss
+    expr: rate(packet_loss_total{app="test-network"}[5m]) > 0.1
     for: 5m
     labels:
-      team: "sre"
-      severity: "major"
+      team: "network"
+      severity: "critical"
+      purpose: "test"
     annotations:
-      dashboard: "https://grafana.tooling-production.poppulo-tooling.com/d/BKf2sowmj/opentelemetry-collector?orgId=1&refresh=10s&var-datasource=GRAFANA-PROMETHEUS&var-minstep=%24__auto_interval_minstep&var-receiver=All&var-processor=All&var-exporter=All&var-app=splunk-otel-collector&from=1676453659364&to=1676475259364"
-      description: "The OpenTelemetry collector is failing to export metrics with the following protocol {% raw %}{{ $labels.exporter }}{% endraw %}"
-      causes: "Service is most likely unhealthy"
-  exporter_spans_failed_splunk: |
-    alert: Refused_Metrics_Points_Splunk
-    expr: rate(otelcol_exporter_enqueue_failed_spans{app="splunk-otel-collector"}[5m]) > 5
+      description: "Packet loss rate is above 10% on the test network"
+      summary: "Significant packet loss detected in test network"
+
+  api_response: |
+    alert: API_Response_Failure
+    expr: rate(api_response_failures{endpoint="/test-api"}[5m]) > 0.05
     for: 5m
     labels:
-      team: "sre"
+      team: "backend"
       severity: "major"
+      purpose: "test"
     annotations:
-      dashboard: "https://grafana.tooling-production.poppulo-tooling.com/d/BKf2sowmj/opentelemetry-collector?orgId=1&refresh=10s&var-datasource=GRAFANA-PROMETHEUS&var-minstep=%24__auto_interval_minstep&var-receiver=All&var-processor=All&var-exporter=All&var-app=splunk-otel-collector&from=1676453659364&to=1676475259364"
-      description: "The Splunk OpenTelemetry collector is failing to export spans with the following protocol {% raw %}{{ $labels.exporter }}{% endraw %}"
-      causes: "Service is most likely unhealthy"
-  exporter_spans_failed_collector: |
-    alert: Refused_Metrics_Points_Opentelemetry_Collector
-    expr: rate(otelcol_exporter_enqueue_failed_spans{app="opentelemetry-collector"}[5m]) > 0
+      description: "API endpoint /test-api is failing more than 5% of the time"
+      summary: "High failure rate detected on /test-api endpoint"
+
+  disk_usage: |
+    alert: Disk_Usage
+    expr: (node_filesystem_size_bytes{mountpoint="/var/lib/docker"} - node_filesystem_free_bytes{mountpoint="/var/lib/docker"}) / node_filesystem_size_bytes{mountpoint="/var/lib/docker"} > 0.8
     for: 5m
     labels:
-      team: "sre"
-      severity: "major"
+      team: "ops"
+      severity: "warning"
+      purpose: "test"
     annotations:
-      dashboard: "https://grafana.tooling-production.poppulo-tooling.com/d/BKf2sowmj/opentelemetry-collector?orgId=1&refresh=10s&var-datasource=GRAFANA-PROMETHEUS&var-minstep=%24__auto_interval_minstep&var-receiver=All&var-processor=All&var-exporter=All&var-app=splunk-otel-collector&from=1676453659364&to=1676475259364"
-      description: "The OpenTelemetry collector is failing to export spans with the following protocol {% raw %}{{ $labels.exporter }}{% endraw %}"
-      causes: "Service is most likely unhealthy"
+      description: "Disk usage for /var/lib/docker is above 80%"
+      summary: "High disk usage detected on /var/lib/docker"

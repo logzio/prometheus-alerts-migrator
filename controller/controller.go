@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/logzio/logzio_terraform_client/grafana_alerts"
+	"github.com/logzio/logzio_terraform_client/grafana_datasources"
 	"github.com/logzio/logzio_terraform_client/grafana_folders"
 	"github.com/prometheus/prometheus/model/rulefmt"
 	_ "github.com/prometheus/prometheus/promql/parser"
@@ -75,10 +76,11 @@ type Controller struct {
 	// Kubernetes API.
 	recorder record.EventRecorder
 
-	logzioAlertClient  *grafana_alerts.GrafanaAlertClient
-	logzioFolderClient *grafana_folders.GrafanaFolderClient
-	rulesDataSource    string
-	envId              string
+	logzioAlertClient      *grafana_alerts.GrafanaAlertClient
+	logzioFolderClient     *grafana_folders.GrafanaFolderClient
+	logzioDataSourceClient *grafana_datasources.GrafanaDatasourceClient
+	rulesDataSource        string
+	envId                  string
 
 	resourceVersionMap         map[string]string
 	interestingAnnotation      *string
@@ -116,18 +118,34 @@ func NewController(
 		klog.Errorf("Failed to create logzio folder client: %v", err)
 		return nil
 	}
+	logzioDataSourceClient, err := grafana_datasources.New(logzioApiToken, logzioApiUrl)
+	if err != nil {
+		klog.Errorf("Failed to create logzio datasource client: %v", err)
+		return nil
+	}
+	// get datasource uid and validate value and type
+	rulesDsData, err := logzioDataSourceClient.GetForAccount(rulesDs)
+	if err != nil || rulesDsData.Uid == "" {
+		klog.Errorf("Failed to get datasource uid: %v", err)
+		return nil
+	}
+	if rulesDsData.Type != "prometheus" {
+		klog.Errorf("Datasource type is not prometheus: %v", err)
+		return nil
+	}
 	controller := &Controller{
-		kubeclientset:         kubeclientset,
-		configmapsLister:      configmapInformer.Lister(),
-		configmapsSynced:      configmapInformer.Informer().HasSynced,
-		workqueue:             workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter()),
-		recorder:              recorder,
-		interestingAnnotation: interestingAnnotation,
-		resourceVersionMap:    make(map[string]string),
-		logzioAlertClient:     logzioAlertClient,
-		logzioFolderClient:    logzioFolderClient,
-		rulesDataSource:       rulesDs,
-		envId:                 envId,
+		kubeclientset:          kubeclientset,
+		configmapsLister:       configmapInformer.Lister(),
+		configmapsSynced:       configmapInformer.Informer().HasSynced,
+		workqueue:              workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter()),
+		recorder:               recorder,
+		interestingAnnotation:  interestingAnnotation,
+		resourceVersionMap:     make(map[string]string),
+		logzioAlertClient:      logzioAlertClient,
+		logzioFolderClient:     logzioFolderClient,
+		logzioDataSourceClient: logzioDataSourceClient,
+		rulesDataSource:        rulesDsData.Uid,
+		envId:                  envId,
 	}
 
 	controller.configmapEventRecorderFunc = controller.recordEventOnConfigMap
@@ -286,7 +304,6 @@ func (c *Controller) processConfigMapsChanges(mapList *corev1.ConfigMapList) err
 		utilruntime.HandleError(err)
 		return err
 	}
-
 	logzioAlertRules, err := c.getLogzioGrafanaAlerts(folderUid)
 	if err != nil {
 		utilruntime.HandleError(err)
