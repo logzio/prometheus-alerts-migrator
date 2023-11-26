@@ -38,19 +38,40 @@ const (
 	letterIdxMask       = 1<<letterIdxBits - 1 // All 1-bits, as many as letterIdxBits
 	letterIdxMax        = 63 / letterIdxBits   // # of letter indices fitting in 63 bits
 	randomStringLength  = 5
-	refId               = "A"
+	refIdA              = "A"
+	refIdB              = "B"
+	expressionString    = "__expr__"
 	queryType           = "query"
 )
 
-// PrometheusQuery represents a Prometheus query.
-type PrometheusQuery struct {
+// ReduceQueryModel represents a reduce query for time series data
+type ReduceQueryModel struct {
+	DataSource map[string]string `json:"datasource"`
+	Expression string            `json:"expression"`
+	Hide       bool              `json:"hide"`
+	RefId      string            `json:"refId"`
+	Reducer    string            `json:"reducer"`
+	Type       string            `json:"type"`
+}
+
+// ToJSON marshals the Query model into a JSON byte slice
+func (r ReduceQueryModel) ToJSON() (json.RawMessage, error) {
+	marshaled, err := json.Marshal(r)
+	if err != nil {
+		return nil, err
+	}
+	return marshaled, nil
+}
+
+// PrometheusQueryModel represents a Prometheus query.
+type PrometheusQueryModel struct {
 	Expr  string `json:"expr"`
 	Hide  bool   `json:"hide"`
 	RefId string `json:"refId"`
 }
 
 // ToJSON marshals the Query into a JSON byte slice
-func (p PrometheusQuery) ToJSON() (json.RawMessage, error) {
+func (p PrometheusQueryModel) ToJSON() (json.RawMessage, error) {
 	marshaled, err := json.Marshal(p)
 	if err != nil {
 		return nil, err
@@ -381,22 +402,48 @@ func (c *Controller) writeRules(rulesToWrite []rulefmt.RuleNode, folderUid strin
 
 // generateGrafanaAlert generates a GrafanaAlertRule from a Prometheus rule
 func (c *Controller) generateGrafanaAlert(rule rulefmt.RuleNode, folderUid string) (grafana_alerts.GrafanaAlertRule, error) {
-	// Create an instance of the Prometheus query.
-	query := PrometheusQuery{
+	// Create promql query to return time series data for the expression.
+	promqlQuery := PrometheusQueryModel{
 		Expr:  rule.Expr.Value,
 		Hide:  false,
-		RefId: refId,
+		RefId: refIdA,
 	}
 	// Use the ToJSON method to marshal the Query struct.
-	model, err := query.ToJSON()
+	promqlModel, err := promqlQuery.ToJSON()
 	if err != nil {
 		return grafana_alerts.GrafanaAlertRule{}, err
 	}
-	data := grafana_alerts.GrafanaAlertQuery{
+	queryA := grafana_alerts.GrafanaAlertQuery{
 		DatasourceUid: c.rulesDataSource,
-		Model:         model,
-		RefId:         refId,
+		Model:         promqlModel,
+		RefId:         refIdA,
 		QueryType:     queryType,
+		RelativeTimeRange: grafana_alerts.RelativeTimeRangeObj{
+			From: 300,
+			To:   0,
+		},
+	}
+	// Create reduce query to return the reduced last value of the time series data.
+	reduceQuery := ReduceQueryModel{
+		DataSource: map[string]string{
+			"type": expressionString,
+			"uid":  expressionString,
+		},
+		Expression: refIdA,
+		Hide:       false,
+		RefId:      refIdB,
+		Reducer:    "last",
+		Type:       "reduce",
+	}
+	reduceModel, err := reduceQuery.ToJSON()
+	if err != nil {
+		return grafana_alerts.GrafanaAlertRule{}, err
+	}
+	queryB := grafana_alerts.GrafanaAlertQuery{
+		DatasourceUid: expressionString,
+		Model:         reduceModel,
+		RefId:         refIdB,
+		QueryType:     "",
 		RelativeTimeRange: grafana_alerts.RelativeTimeRangeObj{
 			From: 300,
 			To:   0,
@@ -406,10 +453,12 @@ func (c *Controller) generateGrafanaAlert(rule rulefmt.RuleNode, folderUid strin
 	if err != nil {
 		return grafana_alerts.GrafanaAlertRule{}, err
 	}
+
+	// Create the GrafanaAlertRule, we are alerting on the reduced last value of the time series data (query b).
 	grafanaAlert := grafana_alerts.GrafanaAlertRule{
 		Annotations:  rule.Annotations,
-		Condition:    refId,
-		Data:         []*grafana_alerts.GrafanaAlertQuery{&data},
+		Condition:    refIdB,
+		Data:         []*grafana_alerts.GrafanaAlertQuery{&queryA, &queryB},
 		FolderUID:    folderUid,
 		NoDataState:  grafana_alerts.NoDataOk,
 		ExecErrState: grafana_alerts.ErrOK,
