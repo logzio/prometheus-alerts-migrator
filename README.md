@@ -61,6 +61,8 @@ data:
 - Deploy the configmap to your cluster `kubectl apply -f <configmap-file>.yml`
 
 ## Changelog
+- v1.0.2
+  - Add `reduce` query to alerts (grafana alerts can evaluate alerts only from reduced data)
 - v1.0.1
   - Update `logzio_terraform_client`: `1.18.0` -> `1.19.0`
   - Use data source uid instead of name
