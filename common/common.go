@@ -75,8 +75,7 @@ func CreateNameStub(cm *corev1.ConfigMap) string {
 	return fmt.Sprintf("%s-%s", namespace, name)
 }
 
-// isAlertEqual compares two AlertRule objects for equality.
-// You should expand this function to compare all relevant fields of AlertRule.
+// IsAlertEqual isAlertEqual compares two AlertRule objects for equality.
 func IsAlertEqual(rule rulefmt.RuleNode, grafanaRule grafana_alerts.GrafanaAlertRule) bool {
 	// Start with name comparison; if these don't match, they're definitely not equal.
 	if rule.Alert.Value != grafanaRule.Title {
