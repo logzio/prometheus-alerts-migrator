@@ -12,14 +12,15 @@ Before running this software, ensure you have:
 
 Configure the application using the following environment variables:
 
-| Environment Variable   | Description                                                                        | Default Value              |
-|------------------------|------------------------------------------------------------------------------------|----------------------------|
-| `LOGZIO_API_TOKEN`     | The API token for your Logz.io account.                                            | `None`                     |
-| `LOGZIO_API_URL`       | The URL endpoint for the Logz.io API.                                              | `https://api.logz.io`      |
-| `CONFIGMAP_ANNOTATION` | The specific annotation the controller should look for in Prometheus alert rules.  | `prometheus.io/kube-rules` |
-| `RULES_DS`             | The metrics data source name in logz.io for the Prometheus rules.                  | `None`                     |
-| `ENV_ID`               | Environment identifier, usually cluster name.                                      | `my-env`                   |
-| `WORKER_COUNT`         | The number of workers to process the alerts.                                       | `2`                        |
+| Environment Variable                | Description                                                                                       | Default Value                     |
+|-------------------------------------|---------------------------------------------------------------------------------------------------|-----------------------------------|
+| `LOGZIO_API_TOKEN`                  | The API token for your Logz.io account.                                                           | `None`                            |
+| `LOGZIO_API_URL`                    | The URL endpoint for the Logz.io API.                                                             | `https://api.logz.io`             |
+| `RULES_CONFIGMAP_ANNOTATION`        | The specific annotation the controller should look for in Prometheus alert rules.                 | `prometheus.io/kube-rules`        |
+| `ALERTMANAGER_CONFIGMAP_ANNOTATION` | The specific annotation the controller should look for in Prometheus alert manager configuration. | `prometheus.io/kube-alertmanager` |
+| `RULES_DS`                          | The metrics data source name in logz.io for the Prometheus rules.                                 | `None`                            |
+| `ENV_ID`                            | Environment identifier, usually cluster name.                                                     | `my-env`                          |
+| `WORKER_COUNT`                      | The number of workers to process the alerts.                                                      | `2`                               |
 
 Please ensure to set all necessary environment variables before running the application.
 
