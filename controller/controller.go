@@ -3,11 +3,11 @@ package controller
 import (
 	"context"
 	"fmt"
+	"github.com/logzio/logzio_terraform_client/grafana_alerts"
+	"github.com/logzio/logzio_terraform_client/grafana_contact_points"
 	"github.com/logzio/prometheus-alerts-migrator/common"
 	"github.com/logzio/prometheus-alerts-migrator/logzio_alerts_client"
-	"time"
-
-	"github.com/logzio/logzio_terraform_client/grafana_alerts"
+	alert_manager_config "github.com/prometheus/alertmanager/config"
 	"github.com/prometheus/prometheus/model/rulefmt"
 	_ "github.com/prometheus/prometheus/promql/parser"
 	"gopkg.in/yaml.v3"
@@ -19,6 +19,7 @@ import (
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog/v2"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -239,11 +240,91 @@ func (c *Controller) syncHandler(key string) error {
 		}
 
 		if c.haveConfigMapsChanged(cmList) {
-			// handle alert manager config process
+			return c.processAlertManagerConfigMaps(cmList)
 		}
 	}
 
 	return nil
+}
+
+func (c *Controller) processAlertManagerConfigMaps(cmList *corev1.ConfigMapList) error {
+	// get contact points and notification policies from logz.io for comparison
+	logzioContactPoints, err := c.logzioGrafanaAlertsClient.GetLogzioGrafanaContactPoints()
+	if err != nil {
+		utilruntime.HandleError(err)
+		return err
+	}
+	logzioNotificationPolicies, err := c.logzioGrafanaAlertsClient.GetLogzioGrafanaNotificationPolicies()
+	if err != nil {
+		utilruntime.HandleError(err)
+		return err
+	}
+	receivers, routes := c.getClusterReceiversAndRoutes(cmList)
+	klog.Info(routes, logzioNotificationPolicies)
+	// Creating maps for efficient lookups
+	contactPointsMap := make(map[string]grafana_contact_points.GrafanaContactPoint)
+	for _, contactPoint := range logzioContactPoints {
+		contactPointsMap[contactPoint.Name] = contactPoint
+	}
+	receiversMap := make(map[string]alert_manager_config.Receiver)
+	for _, receiver := range receivers {
+		receiversMap[receiver.Name] = receiver
+	}
+
+	return nil
+}
+
+func (c *Controller) processContactPoints(contactPointsMap map[string]grafana_contact_points.GrafanaContactPoint, logzioContactPoints map[string]grafana_contact_points.GrafanaContactPoint) {
+	toAdd, toUpdate, toDelete := c.compareContactPoints(contactPointsMap, logzioContactPoints)
+	klog.Infof("Contact points summary: to add: %d, to update: %d, to delete: %d", len(toAdd), len(toUpdate), len(toDelete))
+	if len(toAdd) > 0 {
+		// TODO handle
+	}
+	if len(toUpdate) > 0 {
+		// TODO handle
+	}
+	if len(toDelete) > 0 {
+		// TODO handle
+	}
+}
+
+func (c *Controller) compareContactPoints(contactPointsMap map[string]grafana_contact_points.GrafanaContactPoint, logzioContactPoints map[string]grafana_contact_points.GrafanaContactPoint) (toAdd, toUpdate, toDelete []grafana_contact_points.GrafanaContactPoint) {
+	for _, contactPoint := range logzioContactPoints {
+		if _, ok := contactPointsMap[contactPoint.Name]; !ok {
+			toAdd = append(toAdd, contactPoint)
+		} else {
+			// TODO deep comparison
+			if contactPointsMap[contactPoint.Name].Name != contactPoint.Name {
+				toUpdate = append(toUpdate, contactPoint)
+			}
+		}
+	}
+	for _, contactPoint := range contactPointsMap {
+		if _, ok := logzioContactPoints[contactPoint.Name]; !ok {
+			toDelete = append(toDelete, contactPoint)
+		}
+	}
+	return toAdd, toUpdate, toDelete
+}
+
+func (c *Controller) getClusterReceiversAndRoutes(cmList *corev1.ConfigMapList) ([]alert_manager_config.Receiver, []*alert_manager_config.Route) {
+	var routes []*alert_manager_config.Route
+	var receivers []alert_manager_config.Receiver
+	for _, cm := range cmList.Items {
+		if c.isAlertManagerConfigMap(&cm) {
+			for _, value := range cm.Data {
+				alertManagerConfig, err := alert_manager_config.Load(value)
+				if err != nil {
+					// TODO add descriptive error
+					klog.Error()
+					return nil, nil
+				}
+				routes = append(routes, alertManagerConfig.Route.Routes...)
+				receivers = append(receivers, alertManagerConfig.Receivers...)
+			}
+		}
+	}
+	return receivers, routes
 }
 
 // getConfigMap returns the ConfigMap with the specified name in the specified namespace, or nil if no such ConfigMap exists.
@@ -256,7 +337,7 @@ func (c *Controller) getConfigMap(namespace, name string) (*corev1.ConfigMap, er
 	return configmap, err
 }
 
-// processConfigMapsChanges gets the state of alert rules from both cluster configmaps and logz.io, compares the rules and decide what crud operations to perform
+// processRulesConfigMaps gets the state of alert rules from both cluster configmaps and logz.io, compares the rules and decide what crud operations to perform
 func (c *Controller) processRulesConfigMaps(mapList *corev1.ConfigMapList) error {
 	alertRules := c.getClusterAlertRules(mapList)
 	folderUid, err := c.logzioGrafanaAlertsClient.FindOrCreatePrometheusAlertsFolder()
