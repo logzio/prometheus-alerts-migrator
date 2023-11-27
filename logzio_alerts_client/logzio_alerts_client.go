@@ -10,7 +10,7 @@ import (
 	"github.com/logzio/logzio_terraform_client/grafana_notification_policies"
 	"github.com/logzio/prometheus-alerts-migrator/common"
 	"github.com/prometheus/prometheus/model/rulefmt"
-	"k8s.io/klog"
+	"k8s.io/klog/v2"
 )
 
 const (
