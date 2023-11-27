@@ -2,13 +2,14 @@ package main
 
 import (
 	"flag"
+	"github.com/logzio/prometheus-alerts-migrator/common"
 	"os"
 	"strconv"
 	"time"
 
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/klog"
+	"k8s.io/klog/v2"
 
 	"github.com/logzio/prometheus-alerts-migrator/controller"
 	"github.com/logzio/prometheus-alerts-migrator/pkg/signals"
@@ -16,19 +17,21 @@ import (
 
 // Config holds all the configuration needed for the application to run.
 type Config struct {
-	Annotation     string
-	LogzioAPIToken string
-	LogzioAPIURL   string
-	RulesDS        string
-	EnvID          string
-	WorkerCount    int
+	RulesAnnotation        string
+	AlertManagerAnnotation string
+	LogzioAPIToken         string
+	LogzioAPIURL           string
+	RulesDS                string
+	EnvID                  string
+	WorkerCount            int
 }
 
 // NewConfig creates a Config struct, populating it with values from command-line flags and environment variables.
 func NewConfig() *Config {
 	// Define flags
 	helpFlag := flag.Bool("help", false, "Display help")
-	configmapAnnotation := flag.String("annotation", "prometheus.io/kube-rules", "Annotation that states that this configmap contains prometheus rules")
+	rulesConfigmapAnnotation := flag.String("rules-annotation", "prometheus.io/kube-rules", "Annotation that states that this configmap contains prometheus rules")
+	alertManagerConfigmapAnnotation := flag.String("alertmanager-annotation", "prometheus.io/kube-alertmanager", "Annotation that states that this configmap contains alertmanager configuration")
 	logzioAPITokenFlag := flag.String("logzio-api-token", "", "LOGZIO API token")
 	logzioAPIURLFlag := flag.String("logzio-api-url", "https://api.logz.io", "LOGZIO API URL")
 	rulesDSFlag := flag.String("rules-ds", "", "name of the data source for the alert rules")
@@ -56,9 +59,14 @@ func NewConfig() *Config {
 		klog.Fatal("No rules data source provided")
 	}
 	// Annotation must be provided either by flag or environment variable
-	annotation := getEnvWithFallback("CONFIGMAP_ANNOTATION", *configmapAnnotation)
-	if annotation == "" {
-		klog.Fatal("No ConfigMap annotation provided")
+	rulesAnnotation := getEnvWithFallback("RULES_CONFIGMAP_ANNOTATION", *rulesConfigmapAnnotation)
+	if rulesAnnotation == "" {
+		klog.Fatal("No rules configmap annotation provided")
+	}
+	// Annotation must be provided either by flag or environment variable
+	alertManagerAnnotation := getEnvWithFallback("ALERTMANAGER_CONFIGMAP_ANNOTATION", *alertManagerConfigmapAnnotation)
+	if alertManagerAnnotation == "" {
+		klog.Fatal("No alert manager configmap annotation provided")
 	}
 	workerCountStr := getEnvWithFallback("WORKERS_COOUNT", strconv.Itoa(*workerCountFlag))
 	workerCount, err := strconv.Atoi(workerCountStr)
@@ -67,12 +75,13 @@ func NewConfig() *Config {
 	}
 
 	return &Config{
-		Annotation:     annotation,
-		LogzioAPIToken: logzioAPIToken,
-		LogzioAPIURL:   logzioAPIURL,
-		RulesDS:        rulesDS,
-		EnvID:          envID,
-		WorkerCount:    workerCount,
+		RulesAnnotation:        rulesAnnotation,
+		AlertManagerAnnotation: alertManagerAnnotation,
+		LogzioAPIToken:         logzioAPIToken,
+		LogzioAPIURL:           logzioAPIURL,
+		RulesDS:                rulesDS,
+		EnvID:                  envID,
+		WorkerCount:            workerCount,
 	}
 }
 
@@ -88,7 +97,8 @@ func main() {
 	config := NewConfig()
 
 	klog.Info("Rule Updater starting.\n")
-	klog.Infof("ConfigMap annotation: %s\n", config.Annotation)
+	klog.Infof("Rules configMap annotation: %s\n", config.RulesAnnotation)
+	klog.Infof("AlertManager configMap annotation: %s\n", config.AlertManagerAnnotation)
 	klog.Infof("Environment ID: %s\n", config.EnvID)
 	klog.Infof("Logzio api url: %s\n", config.LogzioAPIURL)
 	klog.Infof("Logzio rules data source: %s\n", config.RulesDS)
@@ -97,7 +107,7 @@ func main() {
 	// set up signals so we handle the first shutdown signal gracefully
 	stopCh := signals.SetupSignalHandler()
 
-	cfg, err := controller.GetConfig()
+	cfg, err := common.GetConfig()
 	if err != nil {
 		klog.Fatalf("Error getting Kubernetes config: %s", err)
 	}
@@ -109,13 +119,13 @@ func main() {
 
 	kubeInformerFactory := informers.NewSharedInformerFactory(kubeClient, time.Second*30)
 
-	c := controller.NewController(kubeClient, kubeInformerFactory.Core().V1().ConfigMaps(), &config.Annotation, config.LogzioAPIToken, config.LogzioAPIURL, config.RulesDS, config.EnvID)
-	if c == nil {
+	ctl := controller.NewController(kubeClient, kubeInformerFactory.Core().V1().ConfigMaps(), &config.RulesAnnotation, &config.AlertManagerAnnotation, config.LogzioAPIToken, config.LogzioAPIURL, config.RulesDS, config.EnvID)
+	if ctl == nil {
 		klog.Fatal("Error creating controller")
 	}
 	kubeInformerFactory.Start(stopCh)
 
-	if err = c.Run(config.WorkerCount, stopCh); err != nil {
+	if err = ctl.Run(config.WorkerCount, stopCh); err != nil {
 		klog.Fatalf("Error running controller: %s", err)
 	}
 }
