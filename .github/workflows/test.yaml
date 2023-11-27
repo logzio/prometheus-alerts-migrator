@@ -12,7 +12,8 @@ jobs:
       LOGZIO_API_URL: https://api.logz.io
       LOGZIO_API_TOKEN: ${{ secrets.LOGZIO_API_TOKEN }}
       RULES_DS: ${{ secrets.RULES_DS }}
-      CONFIGMAP_ANNOTATION: prometheus.io/kube-rules
+      RULES_CONFIGMAP_ANNOTATION: prometheus.io/kube-rules
+      ALERTMANAGER_CONFIGMAP_ANNOTATION: prometheus.io/kube-alertmanager
 
     steps:
       - name: Set up Go
