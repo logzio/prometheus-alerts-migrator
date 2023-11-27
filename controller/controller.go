@@ -2,13 +2,12 @@ package controller
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
+	"github.com/logzio/prometheus-alerts-migrator/common"
+	"github.com/logzio/prometheus-alerts-migrator/logzio_alerts_client"
 	"time"
 
 	"github.com/logzio/logzio_terraform_client/grafana_alerts"
-	"github.com/logzio/logzio_terraform_client/grafana_datasources"
-	"github.com/logzio/logzio_terraform_client/grafana_folders"
 	"github.com/prometheus/prometheus/model/rulefmt"
 	_ "github.com/prometheus/prometheus/promql/parser"
 	"gopkg.in/yaml.v3"
@@ -30,54 +29,9 @@ import (
 )
 
 const (
-	alertFolder         = "prometheus-alerts"
 	controllerAgentName = "logzio-prometheus-alerts-migrator-controller"
 	ErrInvalidKey       = "InvalidKey"
-	letterBytes         = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-	letterIdxBits       = 6                    // 6 bits to represent a letter index
-	letterIdxMask       = 1<<letterIdxBits - 1 // All 1-bits, as many as letterIdxBits
-	letterIdxMax        = 63 / letterIdxBits   // # of letter indices fitting in 63 bits
-	randomStringLength  = 5
-	refIdA              = "A"
-	refIdB              = "B"
-	expressionString    = "__expr__"
-	queryType           = "query"
 )
-
-// ReduceQueryModel represents a reduce query for time series data
-type ReduceQueryModel struct {
-	DataSource map[string]string `json:"datasource"`
-	Expression string            `json:"expression"`
-	Hide       bool              `json:"hide"`
-	RefId      string            `json:"refId"`
-	Reducer    string            `json:"reducer"`
-	Type       string            `json:"type"`
-}
-
-// ToJSON marshals the Query model into a JSON byte slice
-func (r ReduceQueryModel) ToJSON() (json.RawMessage, error) {
-	marshaled, err := json.Marshal(r)
-	if err != nil {
-		return nil, err
-	}
-	return marshaled, nil
-}
-
-// PrometheusQueryModel represents a Prometheus query.
-type PrometheusQueryModel struct {
-	Expr  string `json:"expr"`
-	Hide  bool   `json:"hide"`
-	RefId string `json:"refId"`
-}
-
-// ToJSON marshals the Query into a JSON byte slice
-func (p PrometheusQueryModel) ToJSON() (json.RawMessage, error) {
-	marshaled, err := json.Marshal(p)
-	if err != nil {
-		return nil, err
-	}
-	return marshaled, nil
-}
 
 // Controller is the controller implementation for prometheus alert rules to logzio alert rules
 type Controller struct {
@@ -97,14 +51,13 @@ type Controller struct {
 	// Kubernetes API.
 	recorder record.EventRecorder
 
-	logzioAlertClient      *grafana_alerts.GrafanaAlertClient
-	logzioFolderClient     *grafana_folders.GrafanaFolderClient
-	logzioDataSourceClient *grafana_datasources.GrafanaDatasourceClient
-	rulesDataSource        string
-	envId                  string
+	logzioGrafanaAlertsClient *logzio_alerts_client.LogzioGrafanaAlertsClient
+	rulesDataSource           string
+	envId                     string
 
 	resourceVersionMap         map[string]string
-	interestingAnnotation      *string
+	rulesAnnotation            *string
+	alertManagerAnnotation     *string
 	configmapEventRecorderFunc func(cm *corev1.ConfigMap, eventtype, reason, msg string)
 }
 
@@ -115,7 +68,8 @@ type MultiRuleGroups struct {
 func NewController(
 	kubeclientset *kubernetes.Clientset,
 	configmapInformer corev1informers.ConfigMapInformer,
-	interestingAnnotation *string,
+	rulesAnnotation *string,
+	alertManagerAnnotation *string,
 	logzioApiToken string,
 	logzioApiUrl string,
 	rulesDs string,
@@ -128,45 +82,23 @@ func NewController(
 	eventBroadcaster.StartLogging(klog.Infof)
 	eventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: kubeclientset.CoreV1().Events("")})
 	recorder := eventBroadcaster.NewRecorder(scheme.Scheme, corev1.EventSource{Component: controllerAgentName})
+	logzioGrafanaAlertsClient := logzio_alerts_client.NewLogzioGrafanaAlertsClient(logzioApiToken, logzioApiUrl, rulesDs, envId)
+	if logzioGrafanaAlertsClient == nil {
+		klog.Errorf("Failed to create logzio grafana alerts client")
+		return nil
+	}
 
-	logzioAlertClient, err := grafana_alerts.New(logzioApiToken, logzioApiUrl)
-	if err != nil {
-		klog.Errorf("Failed to create logzio alert client: %v", err)
-		return nil
-	}
-	logzioFolderClient, err := grafana_folders.New(logzioApiToken, logzioApiUrl)
-	if err != nil {
-		klog.Errorf("Failed to create logzio folder client: %v", err)
-		return nil
-	}
-	logzioDataSourceClient, err := grafana_datasources.New(logzioApiToken, logzioApiUrl)
-	if err != nil {
-		klog.Errorf("Failed to create logzio datasource client: %v", err)
-		return nil
-	}
-	// get datasource uid and validate value and type
-	rulesDsData, err := logzioDataSourceClient.GetForAccount(rulesDs)
-	if err != nil || rulesDsData.Uid == "" {
-		klog.Errorf("Failed to get datasource uid: %v", err)
-		return nil
-	}
-	if rulesDsData.Type != "prometheus" {
-		klog.Errorf("Datasource type is not prometheus: %v", err)
-		return nil
-	}
 	controller := &Controller{
-		kubeclientset:          kubeclientset,
-		configmapsLister:       configmapInformer.Lister(),
-		configmapsSynced:       configmapInformer.Informer().HasSynced,
-		workqueue:              workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter()),
-		recorder:               recorder,
-		interestingAnnotation:  interestingAnnotation,
-		resourceVersionMap:     make(map[string]string),
-		logzioAlertClient:      logzioAlertClient,
-		logzioFolderClient:     logzioFolderClient,
-		logzioDataSourceClient: logzioDataSourceClient,
-		rulesDataSource:        rulesDsData.Uid,
-		envId:                  envId,
+		kubeclientset:             kubeclientset,
+		configmapsLister:          configmapInformer.Lister(),
+		configmapsSynced:          configmapInformer.Informer().HasSynced,
+		workqueue:                 workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter()),
+		recorder:                  recorder,
+		rulesAnnotation:           rulesAnnotation,
+		alertManagerAnnotation:    alertManagerAnnotation,
+		resourceVersionMap:        make(map[string]string),
+		logzioGrafanaAlertsClient: logzioGrafanaAlertsClient,
+		envId:                     envId,
 	}
 
 	controller.configmapEventRecorderFunc = controller.recordEventOnConfigMap
@@ -280,19 +212,13 @@ func (c *Controller) syncHandler(key string) error {
 		utilruntime.HandleError(fmt.Errorf("invalid resource key: %s", key))
 		return nil
 	}
-
 	configmap, err := c.getConfigMap(namespace, name)
 	if err != nil {
 		return err
 	}
 
-	bypassCheck := false
-	if configmap == nil {
-		// deleted
-		bypassCheck = true
-	}
-
-	if c.isRuleConfigMap(configmap) || bypassCheck {
+	// process for alert rules configmaps to migrate alert rules
+	if c.isRuleConfigMap(configmap) || configmap == nil {
 		cmList, err := c.kubeclientset.CoreV1().ConfigMaps(corev1.NamespaceAll).List(context.Background(), metav1.ListOptions{})
 		if err != nil {
 			utilruntime.HandleError(fmt.Errorf("unable to collect configmaps from the cluster; %s", err))
@@ -300,7 +226,20 @@ func (c *Controller) syncHandler(key string) error {
 		}
 
 		if c.haveConfigMapsChanged(cmList) {
-			return c.processConfigMapsChanges(cmList)
+			return c.processRulesConfigMaps(cmList)
+		}
+	}
+
+	// process for alert manager configmaps to migrate contact points and notification policies
+	if c.isAlertManagerConfigMap(configmap) {
+		cmList, err := c.kubeclientset.CoreV1().ConfigMaps(corev1.NamespaceAll).List(context.Background(), metav1.ListOptions{})
+		if err != nil {
+			utilruntime.HandleError(fmt.Errorf("unable to collect configmaps from the cluster; %s", err))
+			return nil
+		}
+
+		if c.haveConfigMapsChanged(cmList) {
+			// handle alert manager config process
 		}
 	}
 
@@ -318,14 +257,14 @@ func (c *Controller) getConfigMap(namespace, name string) (*corev1.ConfigMap, er
 }
 
 // processConfigMapsChanges gets the state of alert rules from both cluster configmaps and logz.io, compares the rules and decide what crud operations to perform
-func (c *Controller) processConfigMapsChanges(mapList *corev1.ConfigMapList) error {
+func (c *Controller) processRulesConfigMaps(mapList *corev1.ConfigMapList) error {
 	alertRules := c.getClusterAlertRules(mapList)
-	folderUid, err := c.findOrCreatePrometheusAlertsFolder()
+	folderUid, err := c.logzioGrafanaAlertsClient.FindOrCreatePrometheusAlertsFolder()
 	if err != nil {
 		utilruntime.HandleError(err)
 		return err
 	}
-	logzioAlertRules, err := c.getLogzioGrafanaAlerts(folderUid)
+	logzioAlertRules, err := c.logzioGrafanaAlertsClient.GetLogzioGrafanaAlerts(folderUid)
 	if err != nil {
 		utilruntime.HandleError(err)
 		return err
@@ -345,130 +284,16 @@ func (c *Controller) processConfigMapsChanges(mapList *corev1.ConfigMapList) err
 	klog.Infof("Alert rules summary: to add: %d, to update: %d, to delete: %d", len(toAdd), len(toUpdate), len(toDelete))
 
 	if len(toAdd) > 0 {
-		c.writeRules(toAdd, folderUid)
+		c.logzioGrafanaAlertsClient.WriteRules(toAdd, folderUid)
 	}
 	if len(toUpdate) > 0 {
-		c.updateRules(toUpdate, logzioRulesMap, folderUid)
+		c.logzioGrafanaAlertsClient.UpdateRules(toUpdate, logzioRulesMap, folderUid)
 	}
 	if len(toDelete) > 0 {
-		c.deleteRules(toDelete, folderUid)
+		c.logzioGrafanaAlertsClient.DeleteRules(toDelete, folderUid)
 	}
 
 	return nil
-}
-
-// deleteRules deletes the rules from logz.io
-func (c *Controller) deleteRules(rulesToDelete []grafana_alerts.GrafanaAlertRule, folderUid string) {
-	for _, rule := range rulesToDelete {
-		err := c.logzioAlertClient.DeleteGrafanaAlertRule(rule.Uid)
-		if err != nil {
-			klog.Warningf("Error deleting rule: %s - %s", rule.Title, err.Error())
-		}
-	}
-}
-
-// updateRules updates the rules in logz.io
-func (c *Controller) updateRules(rulesToUpdate []rulefmt.RuleNode, logzioRulesMap map[string]grafana_alerts.GrafanaAlertRule, folderUid string) {
-	for _, rule := range rulesToUpdate {
-		// Retrieve the existing GrafanaAlertRule to get the Uid.
-		existingRule := logzioRulesMap[rule.Alert.Value]
-		alert, err := c.generateGrafanaAlert(rule, folderUid)
-		if err != nil {
-			klog.Warning(err)
-			continue // Skip this rule and continue with the next
-		}
-		// Set the Uid from the existing rule.
-		alert.Uid = existingRule.Uid
-		err = c.logzioAlertClient.UpdateGrafanaAlertRule(alert)
-		if err != nil {
-			klog.Warningf("Error updating rule: %s - %s", alert.Title, err.Error())
-		}
-	}
-}
-
-// writeRules writes the rules to logz.io
-func (c *Controller) writeRules(rulesToWrite []rulefmt.RuleNode, folderUid string) {
-	for _, rule := range rulesToWrite {
-		alert, err := c.generateGrafanaAlert(rule, folderUid)
-		if err != nil {
-			klog.Warning(err)
-		}
-		_, err = c.logzioAlertClient.CreateGrafanaAlertRule(alert)
-		if err != nil {
-			klog.Warning("Error writing rule:", alert.Title, err.Error())
-		}
-	}
-}
-
-// generateGrafanaAlert generates a GrafanaAlertRule from a Prometheus rule
-func (c *Controller) generateGrafanaAlert(rule rulefmt.RuleNode, folderUid string) (grafana_alerts.GrafanaAlertRule, error) {
-	// Create promql query to return time series data for the expression.
-	promqlQuery := PrometheusQueryModel{
-		Expr:  rule.Expr.Value,
-		Hide:  false,
-		RefId: refIdA,
-	}
-	// Use the ToJSON method to marshal the Query struct.
-	promqlModel, err := promqlQuery.ToJSON()
-	if err != nil {
-		return grafana_alerts.GrafanaAlertRule{}, err
-	}
-	queryA := grafana_alerts.GrafanaAlertQuery{
-		DatasourceUid: c.rulesDataSource,
-		Model:         promqlModel,
-		RefId:         refIdA,
-		QueryType:     queryType,
-		RelativeTimeRange: grafana_alerts.RelativeTimeRangeObj{
-			From: 300,
-			To:   0,
-		},
-	}
-	// Create reduce query to return the reduced last value of the time series data.
-	reduceQuery := ReduceQueryModel{
-		DataSource: map[string]string{
-			"type": expressionString,
-			"uid":  expressionString,
-		},
-		Expression: refIdA,
-		Hide:       false,
-		RefId:      refIdB,
-		Reducer:    "last",
-		Type:       "reduce",
-	}
-	reduceModel, err := reduceQuery.ToJSON()
-	if err != nil {
-		return grafana_alerts.GrafanaAlertRule{}, err
-	}
-	queryB := grafana_alerts.GrafanaAlertQuery{
-		DatasourceUid: expressionString,
-		Model:         reduceModel,
-		RefId:         refIdB,
-		QueryType:     "",
-		RelativeTimeRange: grafana_alerts.RelativeTimeRangeObj{
-			From: 300,
-			To:   0,
-		},
-	}
-	duration, err := parseDuration(rule.For.String())
-	if err != nil {
-		return grafana_alerts.GrafanaAlertRule{}, err
-	}
-
-	// Create the GrafanaAlertRule, we are alerting on the reduced last value of the time series data (query b).
-	grafanaAlert := grafana_alerts.GrafanaAlertRule{
-		Annotations:  rule.Annotations,
-		Condition:    refIdB,
-		Data:         []*grafana_alerts.GrafanaAlertQuery{&queryA, &queryB},
-		FolderUID:    folderUid,
-		NoDataState:  grafana_alerts.NoDataOk,
-		ExecErrState: grafana_alerts.ErrOK,
-		Labels:       rule.Labels,
-		OrgID:        1,
-		RuleGroup:    rule.Alert.Value,
-		Title:        rule.Alert.Value,
-		For:          duration,
-	}
-	return grafanaAlert, nil
 }
 
 // enqueueConfigMap get the cm on the workqueue
@@ -497,50 +322,10 @@ func (c *Controller) getClusterAlertRules(mapList *corev1.ConfigMapList) *[]rule
 	return &finalRules
 }
 
-// getLogzioGrafanaAlerts builds a list of rules from all logz.io
-func (c *Controller) getLogzioGrafanaAlerts(folderUid string) ([]grafana_alerts.GrafanaAlertRule, error) {
-	alertRules, ListLogzioRulesErr := c.logzioAlertClient.ListGrafanaAlertRules()
-	if ListLogzioRulesErr != nil {
-		return nil, ListLogzioRulesErr
-	}
-	// find all alerts inside prometheus alerts folder
-	var alertsInFolder []grafana_alerts.GrafanaAlertRule
-	for _, rule := range alertRules {
-		if rule.FolderUID == folderUid {
-			alertsInFolder = append(alertsInFolder, rule)
-		}
-	}
-	return alertsInFolder, nil
-}
-
-// findOrCreatePrometheusAlertsFolder tries to find the prometheus alerts folder in logz.io, if it does not exist it creates it.
-func (c *Controller) findOrCreatePrometheusAlertsFolder() (string, error) {
-	folders, err := c.logzioFolderClient.ListGrafanaFolders()
-	if err != nil {
-		return "", err
-	}
-	envFolderTitle := fmt.Sprintf("%s-%s", c.envId, alertFolder)
-	// try to find the prometheus alerts folder
-	for _, folder := range folders {
-		if folder.Title == envFolderTitle {
-			return folder.Uid, nil
-		}
-	}
-	// if not found, create the prometheus alerts folder
-	grafanaFolder, err := c.logzioFolderClient.CreateGrafanaFolder(grafana_folders.CreateUpdateFolder{
-		Uid:   fmt.Sprintf("%s-%s", envFolderTitle, generateRandomString(randomStringLength)),
-		Title: envFolderTitle,
-	})
-	if err != nil {
-		return "", err
-	}
-	return grafanaFolder.Uid, nil
-}
-
 // extractValues extracts the rules from the configmap, and validates them
 func (c *Controller) extractValues(cm *corev1.ConfigMap) []rulefmt.RuleNode {
 
-	fallbackNameStub := createNameStub(cm)
+	fallbackNameStub := common.CreateNameStub(cm)
 
 	var toalRules []rulefmt.RuleNode
 
@@ -604,7 +389,7 @@ func (c *Controller) compareAlertRules(k8sRulesMap map[string]rulefmt.RuleNode, 
 		if !exists {
 			// Alert doesn't exist in Logz.io, needs to be added.
 			toAdd = append(toAdd, k8sRule)
-		} else if !isAlertEqual(k8sRule, logzioRule) {
+		} else if !common.IsAlertEqual(k8sRule, logzioRule) {
 			// Alert exists but differs, needs to be updated.
 			toUpdate = append(toUpdate, k8sRule)
 		}
@@ -629,11 +414,24 @@ func (c *Controller) isRuleConfigMap(cm *corev1.ConfigMap) bool {
 	annotations := cm.GetObjectMeta().GetAnnotations()
 
 	for key := range annotations {
-		if key == *c.interestingAnnotation {
+		if key == *c.rulesAnnotation {
 			return true
 		}
 	}
+	return false
+}
 
+// isAlertManagerConfigMap checks if the configmap is a rule configmap
+func (c *Controller) isAlertManagerConfigMap(cm *corev1.ConfigMap) bool {
+	if cm == nil {
+		return false
+	}
+	annotations := cm.GetObjectMeta().GetAnnotations()
+	for key := range annotations {
+		if key == *c.alertManagerAnnotation {
+			return true
+		}
+	}
 	return false
 }
 
@@ -645,8 +443,8 @@ func (c *Controller) haveConfigMapsChanged(mapList *corev1.ConfigMapList) bool {
 		return false
 	}
 	for _, cm := range mapList.Items {
-		if c.isRuleConfigMap(&cm) {
-			stub := createNameStub(&cm)
+		if c.isRuleConfigMap(&cm) || c.isAlertManagerConfigMap(&cm) {
+			stub := common.CreateNameStub(&cm)
 			val, ok := c.resourceVersionMap[stub]
 			if !ok {
 				// new configmap
