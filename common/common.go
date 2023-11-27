@@ -1,24 +1,30 @@
-package controller
+package common
 
 import (
 	"fmt"
-	"math/rand"
-	"os"
-	"path/filepath"
-	"reflect"
-	"strconv"
-	"time"
-
 	"github.com/logzio/logzio_terraform_client/grafana_alerts"
 	"github.com/prometheus/prometheus/model/rulefmt"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/homedir"
+	"math/rand"
+	"os"
+	"path/filepath"
+	"reflect"
+	"strconv"
+	"time"
 )
 
-// borrowed from here https://stackoverflow.com/questions/22892120/how-to-generate-a-random-string-of-a-fixed-length-in-go
-func generateRandomString(n int) string {
+const (
+	LetterBytes   = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	letterIdxBits = 6                    // 6 bits to represent a letter index
+	letterIdxMask = 1<<letterIdxBits - 1 // All 1-bits, as many as letterIdxBits
+	letterIdxMax  = 63 / letterIdxBits   // # of letter indices fitting in 63 bits
+)
+
+// GenerateRandomString borrowed from here https://stackoverflow.com/questions/22892120/how-to-generate-a-random-string-of-a-fixed-length-in-go
+func GenerateRandomString(n int) string {
 	if n <= 0 {
 		return "" // Return an empty string for non-positive lengths
 	}
@@ -28,8 +34,8 @@ func generateRandomString(n int) string {
 		if remain == 0 {
 			cache, remain = src.Int63(), letterIdxMax
 		}
-		if idx := int(cache & letterIdxMask); idx < len(letterBytes) {
-			b[i] = letterBytes[idx]
+		if idx := int(cache & letterIdxMask); idx < len(LetterBytes) {
+			b[i] = LetterBytes[idx]
 			i--
 		}
 		cache >>= letterIdxBits
@@ -39,8 +45,8 @@ func generateRandomString(n int) string {
 	return string(b)
 }
 
-// parseDuration turns a duration string (example: 5m, 1h) into an int64 value
-func parseDuration(durationStr string) (int64, error) {
+// ParseDuration turns a duration string (example: 5m, 1h) into an int64 value
+func ParseDuration(durationStr string) (int64, error) {
 	// Check if the string is empty
 	if durationStr == "" {
 		return 0, fmt.Errorf("duration string is empty")
@@ -62,7 +68,7 @@ func parseDuration(durationStr string) (int64, error) {
 	return int64(duration), nil
 }
 
-func createNameStub(cm *corev1.ConfigMap) string {
+func CreateNameStub(cm *corev1.ConfigMap) string {
 	name := cm.GetObjectMeta().GetName()
 	namespace := cm.GetObjectMeta().GetNamespace()
 
@@ -71,7 +77,7 @@ func createNameStub(cm *corev1.ConfigMap) string {
 
 // isAlertEqual compares two AlertRule objects for equality.
 // You should expand this function to compare all relevant fields of AlertRule.
-func isAlertEqual(rule rulefmt.RuleNode, grafanaRule grafana_alerts.GrafanaAlertRule) bool {
+func IsAlertEqual(rule rulefmt.RuleNode, grafanaRule grafana_alerts.GrafanaAlertRule) bool {
 	// Start with name comparison; if these don't match, they're definitely not equal.
 	if rule.Alert.Value != grafanaRule.Title {
 		return false
@@ -82,7 +88,7 @@ func isAlertEqual(rule rulefmt.RuleNode, grafanaRule grafana_alerts.GrafanaAlert
 	if !reflect.DeepEqual(rule.Annotations, grafanaRule.Annotations) {
 		return false
 	}
-	forAtt, _ := parseDuration(rule.For.String())
+	forAtt, _ := ParseDuration(rule.For.String())
 	if forAtt != grafanaRule.For {
 		return false
 	}
