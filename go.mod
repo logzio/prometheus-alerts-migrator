@@ -3,7 +3,8 @@ module github.com/logzio/prometheus-alerts-migrator
 go 1.19
 
 require (
-	github.com/logzio/logzio_terraform_client v1.19.0
+	github.com/logzio/logzio_terraform_client v1.20.0
+	github.com/prometheus/alertmanager v0.26.0
 	github.com/prometheus/common v0.44.0
 	github.com/prometheus/prometheus v0.47.2
 	github.com/stretchr/testify v1.8.4
@@ -21,7 +22,7 @@ require (
 	github.com/AzureAD/microsoft-authentication-library-for-go v1.0.0 // indirect
 	github.com/alecthomas/units v0.0.0-20211218093645-b94a6e3cc137 // indirect
 	github.com/avast/retry-go v3.0.0+incompatible // indirect
-	github.com/aws/aws-sdk-go v1.44.302 // indirect
+	github.com/aws/aws-sdk-go v1.44.317 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
