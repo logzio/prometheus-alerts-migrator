@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"github.com/logzio/prometheus-alerts-migrator/common"
 	"github.com/logzio/prometheus-alerts-migrator/pkg/signals"
 	"github.com/stretchr/testify/assert"
 	"io/ioutil"
@@ -63,22 +64,22 @@ func cleanupTestCluster(clientset *kubernetes.Clientset, namespace string, confi
 }
 
 func cleanupLogzioAlerts(ctl Controller) {
-	folderUid, err := ctl.findOrCreatePrometheusAlertsFolder()
+	folderUid, err := ctl.logzioGrafanaAlertsClient.FindOrCreatePrometheusAlertsFolder()
 	if err != nil {
 		log.Fatalf("Failed to get logzio alerts folder uid: %v", err)
 	}
-	logzioAlerts, err := ctl.getLogzioGrafanaAlerts(folderUid)
+	logzioAlerts, err := ctl.logzioGrafanaAlertsClient.GetLogzioGrafanaAlerts(folderUid)
 	if err != nil {
 		log.Fatalf("Failed to get logzio alerts: %v", err)
 	}
 	// defer cleanup
-	ctl.deleteRules(logzioAlerts, folderUid)
+	ctl.logzioGrafanaAlertsClient.DeleteRules(logzioAlerts, folderUid)
 }
 
 // TestControllerE2E is the main function that runs the end-to-end test
 func TestControllerE2E(t *testing.T) {
 	// Setup the test environment
-	config, err := GetConfig()
+	config, err := common.GetConfig()
 	if err != nil {
 		t.Fatalf("Failed to get Kubernetes config: %v", err)
 	}
@@ -90,12 +91,13 @@ func TestControllerE2E(t *testing.T) {
 	logzioUrl := os.Getenv("LOGZIO_API_URL")
 	logzioAPIToken := os.Getenv("LOGZIO_API_TOKEN")
 	rulesDS := os.Getenv("RULES_DS")
-	anno := os.Getenv("CONFIGMAP_ANNOTATION")
+	rulesAnnotation := os.Getenv("RULES_CONFIGMAP_ANNOTATION")
+	alertManagerAnnotation := os.Getenv("ALERTMANAGER_CONFIGMAP_ANNOTATION")
 	kubeInformerFactory := informers.NewSharedInformerFactory(clientset, time.Second*30)
 	// set up signals so we handle the first shutdown signal gracefully
 	stopCh := signals.SetupSignalHandler()
 	// Instantiate the controller
-	ctrl := NewController(clientset, kubeInformerFactory.Core().V1().ConfigMaps(), &anno, logzioAPIToken, logzioUrl, rulesDS, "integration-test")
+	ctrl := NewController(clientset, kubeInformerFactory.Core().V1().ConfigMaps(), &rulesAnnotation, &alertManagerAnnotation, logzioAPIToken, logzioUrl, rulesDS, "integration-test")
 
 	// defer cleanup
 	defer cleanupLogzioAlerts(*ctrl)
@@ -115,11 +117,11 @@ func TestControllerE2E(t *testing.T) {
 	}()
 	t.Log("going to sleep")
 	time.Sleep(time.Second * 10)
-	folderUid, err := ctrl.findOrCreatePrometheusAlertsFolder()
+	folderUid, err := ctrl.logzioGrafanaAlertsClient.FindOrCreatePrometheusAlertsFolder()
 	if err != nil {
 		t.Fatalf("Failed to get logzio alerts folder uid: %v", err)
 	}
-	logzioAlerts, err := ctrl.getLogzioGrafanaAlerts(folderUid)
+	logzioAlerts, err := ctrl.logzioGrafanaAlertsClient.GetLogzioGrafanaAlerts(folderUid)
 	if err != nil {
 		t.Fatalf("Failed to get logzio alerts: %v", err)
 	}
