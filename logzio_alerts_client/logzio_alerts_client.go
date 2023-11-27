@@ -228,6 +228,23 @@ func (l *LogzioGrafanaAlertsClient) generateGrafanaAlert(rule rulefmt.RuleNode, 
 	return grafanaAlert, nil
 }
 
+func (l *LogzioGrafanaAlertsClient) GetLogzioGrafanaContactPoints() ([]grafana_contact_points.GrafanaContactPoint, error) {
+	contactPoints, err := l.logzioContactPointClient.GetAllGrafanaContactPoints()
+	if err != nil {
+		return nil, err
+	}
+	return contactPoints, nil
+}
+
+func (l *LogzioGrafanaAlertsClient) GetLogzioGrafanaNotificationPolicies() (grafana_notification_policies.GrafanaNotificationPolicyTree, error) {
+	notificationPolicies, err := l.logzioNotificationPolicyClient.GetGrafanaNotificationPolicyTree()
+	if err != nil {
+		return grafana_notification_policies.GrafanaNotificationPolicyTree{}, err
+	}
+	return notificationPolicies, nil
+
+}
+
 // GetLogzioGrafanaAlerts builds a list of rules from all logz.io
 func (l *LogzioGrafanaAlertsClient) GetLogzioGrafanaAlerts(folderUid string) ([]grafana_alerts.GrafanaAlertRule, error) {
 	alertRules, ListLogzioRulesErr := l.logzioAlertClient.ListGrafanaAlertRules()
