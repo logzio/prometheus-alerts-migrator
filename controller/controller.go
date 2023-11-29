@@ -260,7 +260,10 @@ func (c *Controller) processAlertManagerConfigMaps(cmList *corev1.ConfigMapList)
 		return err
 	}
 	receivers, routes := c.getClusterReceiversAndRoutes(cmList)
+
+	// TODO remove redundant log
 	klog.Info(routes, logzioNotificationPolicies)
+
 	// Creating maps for efficient lookups
 	contactPointsMap := make(map[string]grafana_contact_points.GrafanaContactPoint)
 	for _, contactPoint := range logzioContactPoints {
@@ -270,12 +273,13 @@ func (c *Controller) processAlertManagerConfigMaps(cmList *corev1.ConfigMapList)
 	for _, receiver := range receivers {
 		receiversMap[receiver.Name] = receiver
 	}
+	c.processContactPoints(receiversMap, contactPointsMap)
 
 	return nil
 }
 
-func (c *Controller) processContactPoints(contactPointsMap map[string]grafana_contact_points.GrafanaContactPoint, logzioContactPoints map[string]grafana_contact_points.GrafanaContactPoint) {
-	toAdd, toUpdate, toDelete := c.compareContactPoints(contactPointsMap, logzioContactPoints)
+func (c *Controller) processContactPoints(receiversMap map[string]alert_manager_config.Receiver, logzioContactPoints map[string]grafana_contact_points.GrafanaContactPoint) {
+	toAdd, toUpdate, toDelete := c.compareContactPoints(receiversMap, logzioContactPoints)
 	klog.Infof("Contact points summary: to add: %d, to update: %d, to delete: %d", len(toAdd), len(toUpdate), len(toDelete))
 	if len(toAdd) > 0 {
 		// TODO handle
@@ -288,19 +292,23 @@ func (c *Controller) processContactPoints(contactPointsMap map[string]grafana_co
 	}
 }
 
-func (c *Controller) compareContactPoints(contactPointsMap map[string]grafana_contact_points.GrafanaContactPoint, logzioContactPoints map[string]grafana_contact_points.GrafanaContactPoint) (toAdd, toUpdate, toDelete []grafana_contact_points.GrafanaContactPoint) {
-	for _, contactPoint := range logzioContactPoints {
-		if _, ok := contactPointsMap[contactPoint.Name]; !ok {
-			toAdd = append(toAdd, contactPoint)
-		} else {
-			// TODO deep comparison
-			if contactPointsMap[contactPoint.Name].Name != contactPoint.Name {
-				toUpdate = append(toUpdate, contactPoint)
-			}
+// compareContactPoints
+func (c *Controller) compareContactPoints(receiversMap map[string]alert_manager_config.Receiver, logzioContactPoints map[string]grafana_contact_points.GrafanaContactPoint) (toAdd, toUpdate []alert_manager_config.Receiver, toDelete []grafana_contact_points.GrafanaContactPoint) {
+	// Determine rules to add or update.
+	for receiverName, receiver := range receiversMap {
+		contactPoint, exists := logzioContactPoints[receiverName]
+		if !exists {
+			// Contact point doesn't exist in Logz.io, needs to be added.
+			toAdd = append(toAdd, receiver)
+		} else if !common.IsContactPointEqual(receiver, contactPoint) {
+			// Contact point exists but differs, needs to be updated.
+			toUpdate = append(toUpdate, receiver)
 		}
 	}
-	for _, contactPoint := range contactPointsMap {
-		if _, ok := logzioContactPoints[contactPoint.Name]; !ok {
+	// Determine contact points from logzio to delete.
+	for contactPointName, contactPoint := range logzioContactPoints {
+		if _, exists := receiversMap[contactPointName]; !exists {
+			// Contact point exists in Logz.io but not in alert manager, needs to be deleted.
 			toDelete = append(toDelete, contactPoint)
 		}
 	}

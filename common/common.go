@@ -3,6 +3,8 @@ package common
 import (
 	"fmt"
 	"github.com/logzio/logzio_terraform_client/grafana_alerts"
+	"github.com/logzio/logzio_terraform_client/grafana_contact_points"
+	alert_manager_config "github.com/prometheus/alertmanager/config"
 	"github.com/prometheus/prometheus/model/rulefmt"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/rest"
@@ -75,7 +77,7 @@ func CreateNameStub(cm *corev1.ConfigMap) string {
 	return fmt.Sprintf("%s-%s", namespace, name)
 }
 
-// IsAlertEqual isAlertEqual compares two AlertRule objects for equality.
+// IsAlertEqual compares two AlertRule objects for equality.
 func IsAlertEqual(rule rulefmt.RuleNode, grafanaRule grafana_alerts.GrafanaAlertRule) bool {
 	// Start with name comparison; if these don't match, they're definitely not equal.
 	if rule.Alert.Value != grafanaRule.Title {
@@ -94,6 +96,15 @@ func IsAlertEqual(rule rulefmt.RuleNode, grafanaRule grafana_alerts.GrafanaAlert
 	if rule.Expr.Value != grafanaRule.Data[0].Model.(map[string]interface{})["expr"] {
 		return false
 	}
+	return true
+}
+
+// IsContactPointEqual compares two ContactPoint objects for equality.
+func IsContactPointEqual(cp1 alert_manager_config.Receiver, cp2 grafana_contact_points.GrafanaContactPoint) bool {
+	if cp1.Name != cp2.Name {
+		return false
+	}
+	// TODO deep comparison
 	return true
 }
 
