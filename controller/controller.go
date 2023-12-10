@@ -271,7 +271,7 @@ func (c *Controller) getConfigMap(namespace, name string) (*corev1.ConfigMap, er
 
 func (c *Controller) processAlertManagerConfigMaps(configmap *corev1.ConfigMap) error {
 	// get contact points and notification policies from logz.io for comparison
-	logzioContactPoints, err := c.logzioGrafanaAlertsClient.GetLogzioGrafanaContactPoints()
+	logzioContactPoints, err := c.logzioGrafanaAlertsClient.GetLogzioManagedGrafanaContactPoints()
 	if err != nil {
 		utilruntime.HandleError(err)
 		return err
@@ -284,17 +284,12 @@ func (c *Controller) processAlertManagerConfigMaps(configmap *corev1.ConfigMap) 
 
 	// get receivers and routes from alert manager configmap
 	receivers, routes := c.getClusterReceiversAndRoutes(configmap)
-
-	//contactPointsMap := make(map[string]grafana_contact_points.GrafanaContactPoint)
-	//for _, contactPoint := range logzioContactPoints {
-	//	contactPointsMap[contactPoint.Name] = contactPoint
-	//}
 	// Creating maps for efficient lookups
-
 	receiversMap := make(map[string]alert_manager_config.Receiver)
 	for _, receiver := range receivers {
 		receiversMap[receiver.Name] = receiver
 	}
+
 	c.processContactPoints(receiversMap, logzioContactPoints)
 
 	// TODO remove redundant log

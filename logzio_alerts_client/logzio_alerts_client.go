@@ -12,6 +12,7 @@ import (
 	alert_manager_config "github.com/prometheus/alertmanager/config"
 	"github.com/prometheus/prometheus/model/rulefmt"
 	"k8s.io/klog/v2"
+	"strings"
 )
 
 const (
@@ -330,12 +331,19 @@ func (l *LogzioGrafanaAlertsClient) generateGrafanaAlert(rule rulefmt.RuleNode, 
 	return grafanaAlert, nil
 }
 
-func (l *LogzioGrafanaAlertsClient) GetLogzioGrafanaContactPoints() ([]grafana_contact_points.GrafanaContactPoint, error) {
+func (l *LogzioGrafanaAlertsClient) GetLogzioManagedGrafanaContactPoints() ([]grafana_contact_points.GrafanaContactPoint, error) {
 	contactPoints, err := l.logzioContactPointClient.GetAllGrafanaContactPoints()
 	if err != nil {
 		return nil, err
 	}
-	return contactPoints, nil
+	var managedContactPoints []grafana_contact_points.GrafanaContactPoint
+	for _, contactPoint := range contactPoints {
+		// check if the contact point name contains the env id to determine if it is a managed contact point
+		if strings.Contains(contactPoint.Name, l.envId) {
+			managedContactPoints = append(managedContactPoints, contactPoint)
+		}
+	}
+	return managedContactPoints, nil
 }
 
 func (l *LogzioGrafanaAlertsClient) GetLogzioGrafanaNotificationPolicies() (grafana_notification_policies.GrafanaNotificationPolicyTree, error) {
