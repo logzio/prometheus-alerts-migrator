@@ -9,6 +9,7 @@ import (
 	"github.com/logzio/logzio_terraform_client/grafana_folders"
 	"github.com/logzio/logzio_terraform_client/grafana_notification_policies"
 	"github.com/logzio/prometheus-alerts-migrator/common"
+	alert_manager_config "github.com/prometheus/alertmanager/config"
 	"github.com/prometheus/prometheus/model/rulefmt"
 	"k8s.io/klog/v2"
 )
@@ -58,6 +59,7 @@ func (p PrometheusQueryModel) ToJSON() (json.RawMessage, error) {
 }
 
 type LogzioGrafanaAlertsClient struct {
+	AlertManagerGlobalConfig       *alert_manager_config.GlobalConfig
 	logzioAlertClient              *grafana_alerts.GrafanaAlertClient
 	logzioFolderClient             *grafana_folders.GrafanaFolderClient
 	logzioDataSourceClient         *grafana_datasources.GrafanaDatasourceClient
@@ -112,6 +114,106 @@ func NewLogzioGrafanaAlertsClient(logzioApiToken string, logzioApiUrl string, ru
 		rulesDataSource:                rulesDsData.Uid,
 		envId:                          envId,
 	}
+}
+
+// WriteContactPoints writes the contact points to logz.io
+func (l *LogzioGrafanaAlertsClient) WriteContactPoints(contactPointsToWrite []alert_manager_config.Receiver) {
+	for _, contactPoint := range contactPointsToWrite {
+		contactPointsList := l.generateGrafanaContactPoint(contactPoint)
+		for _, cp := range contactPointsList {
+			_, err := l.logzioContactPointClient.CreateGrafanaContactPoint(cp)
+			if err != nil {
+				klog.Warningf("Failed to create contact point: %v", err)
+			}
+		}
+	}
+}
+
+// DeleteContactPoints deletes the contact points from logz.io
+func (l *LogzioGrafanaAlertsClient) DeleteContactPoints(contactPointsToDelete []grafana_contact_points.GrafanaContactPoint) {
+	for _, contactPoint := range contactPointsToDelete {
+		err := l.logzioContactPointClient.DeleteGrafanaContactPoint(contactPoint.Uid)
+		if err != nil {
+			klog.Warningf("Failed to delete contact point: %v", err)
+		}
+	}
+}
+
+// UpdateContactPoints updates the contact points in logz.io
+func (l *LogzioGrafanaAlertsClient) UpdateContactPoints(contactPointsToUpdate []alert_manager_config.Receiver, contactPointsMap []grafana_contact_points.GrafanaContactPoint) {
+	for _, contactPoint := range contactPointsToUpdate {
+		contactPointsList := l.generateGrafanaContactPoint(contactPoint)
+		for _, cp := range contactPointsList {
+			for _, logzioContactPoint := range contactPointsMap {
+				if logzioContactPoint.Name == cp.Name {
+					cp.Uid = logzioContactPoint.Uid
+					err := l.logzioContactPointClient.UpdateContactPoint(cp)
+					if err != nil {
+						klog.Warningf("Failed to update contact point: %v", err)
+					}
+				}
+			}
+		}
+	}
+}
+
+// generateGrafanaContactPoint generates a GrafanaContactPoint from a alert_manager_config.Receiver
+func (l *LogzioGrafanaAlertsClient) generateGrafanaContactPoint(receiver alert_manager_config.Receiver) (contactPointsList []grafana_contact_points.GrafanaContactPoint) {
+	// check for email type configs
+	for _, emailConfig := range receiver.EmailConfigs {
+		contactPoint := grafana_contact_points.GrafanaContactPoint{
+			Name:                  receiver.Name,
+			Type:                  common.TypeEmail,
+			Uid:                   common.GenerateRandomString(9),
+			DisableResolveMessage: false,
+			Settings: map[string]interface{}{
+				"addresses":   emailConfig.To,
+				"message":     emailConfig.HTML,
+				"singleEmail": true,
+			},
+		}
+		contactPointsList = append(contactPointsList, contactPoint)
+	}
+	// check for slack type configs
+	for _, slackConfig := range receiver.SlackConfigs {
+		var url string
+		if slackConfig.APIURL.String() != "" {
+			url = slackConfig.APIURL.String()
+		} else {
+			url = l.AlertManagerGlobalConfig.SlackAPIURL.String()
+		}
+		contactPoint := grafana_contact_points.GrafanaContactPoint{
+			Name:                  receiver.Name,
+			Type:                  common.TypeSlack,
+			Uid:                   common.GenerateRandomString(9),
+			DisableResolveMessage: false,
+			Settings: map[string]interface{}{
+				"url":       url,
+				"recipient": slackConfig.Channel,
+				"text":      slackConfig.Text,
+				"title":     slackConfig.Title,
+				"username":  slackConfig.Username,
+			},
+		}
+		contactPointsList = append(contactPointsList, contactPoint)
+	}
+	// check for pagerduty type configs
+	for _, pagerdutyConfig := range receiver.PagerdutyConfigs {
+		contactPoint := grafana_contact_points.GrafanaContactPoint{
+			Name:                  receiver.Name,
+			Type:                  common.TypePagerDuty,
+			Uid:                   common.GenerateRandomString(9),
+			DisableResolveMessage: false,
+			Settings: map[string]interface{}{
+				"integrationKey": pagerdutyConfig.ServiceKey,
+				"description":    pagerdutyConfig.Description,
+				"client":         pagerdutyConfig.Client,
+				"clientUrl":      pagerdutyConfig.ClientURL,
+			},
+		}
+		contactPointsList = append(contactPointsList, contactPoint)
+	}
+	return contactPointsList
 }
 
 // DeleteRules deletes the rules from logz.io

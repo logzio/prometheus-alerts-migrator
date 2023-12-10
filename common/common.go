@@ -3,8 +3,6 @@ package common
 import (
 	"fmt"
 	"github.com/logzio/logzio_terraform_client/grafana_alerts"
-	"github.com/logzio/logzio_terraform_client/grafana_contact_points"
-	alert_manager_config "github.com/prometheus/alertmanager/config"
 	"github.com/prometheus/prometheus/model/rulefmt"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/rest"
@@ -22,7 +20,10 @@ const (
 	LetterBytes   = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 	letterIdxBits = 6                    // 6 bits to represent a letter index
 	letterIdxMask = 1<<letterIdxBits - 1 // All 1-bits, as many as letterIdxBits
-	letterIdxMax  = 63 / letterIdxBits   // # of letter indices fitting in 63 bits
+	letterIdxMax  = 63 / letterIdxBits
+	TypeSlack     = "slack"
+	TypeEmail     = "email"
+	TypePagerDuty = "pagerduty" // # of letter indices fitting in 63 bits
 )
 
 // GenerateRandomString borrowed from here https://stackoverflow.com/questions/22892120/how-to-generate-a-random-string-of-a-fixed-length-in-go
@@ -96,15 +97,6 @@ func IsAlertEqual(rule rulefmt.RuleNode, grafanaRule grafana_alerts.GrafanaAlert
 	if rule.Expr.Value != grafanaRule.Data[0].Model.(map[string]interface{})["expr"] {
 		return false
 	}
-	return true
-}
-
-// IsContactPointEqual compares two ContactPoint objects for equality.
-func IsContactPointEqual(cp1 alert_manager_config.Receiver, cp2 grafana_contact_points.GrafanaContactPoint) bool {
-	if cp1.Name != cp2.Name {
-		return false
-	}
-	// TODO deep comparison
 	return true
 }
 

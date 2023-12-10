@@ -56,9 +56,10 @@ type Controller struct {
 	rulesDataSource           string
 	envId                     string
 
-	resourceVersionMap         map[string]string
-	rulesAnnotation            *string
-	alertManagerAnnotation     *string
+	resourceVersionMap     map[string]string
+	rulesAnnotation        *string
+	alertManagerAnnotation *string
+
 	configmapEventRecorderFunc func(cm *corev1.ConfigMap, eventtype, reason, msg string)
 }
 
@@ -118,6 +119,17 @@ func NewController(
 	})
 
 	return controller
+}
+
+// enqueueConfigMap get the cm on the workqueue
+func (c *Controller) enqueueConfigMap(obj interface{}) {
+	var key string
+	var err error
+	if key, err = cache.MetaNamespaceKeyFunc(obj); err != nil {
+		utilruntime.HandleError(err)
+		return
+	}
+	c.workqueue.Add(key)
 }
 
 func (c *Controller) Run(threadiness int, stopCh <-chan struct{}) error {
@@ -240,14 +252,24 @@ func (c *Controller) syncHandler(key string) error {
 		}
 
 		if c.haveConfigMapsChanged(cmList) {
-			return c.processAlertManagerConfigMaps(cmList)
+			return c.processAlertManagerConfigMaps(configmap)
 		}
 	}
 
 	return nil
 }
 
-func (c *Controller) processAlertManagerConfigMaps(cmList *corev1.ConfigMapList) error {
+// getConfigMap returns the ConfigMap with the specified name in the specified namespace, or nil if no such ConfigMap exists.
+func (c *Controller) getConfigMap(namespace, name string) (*corev1.ConfigMap, error) {
+	configmap, err := c.configmapsLister.ConfigMaps(namespace).Get(name)
+	if errors.IsNotFound(err) {
+		utilruntime.HandleError(fmt.Errorf("configmap '%s' in work queue no longer exists", name))
+		return nil, nil
+	}
+	return configmap, err
+}
+
+func (c *Controller) processAlertManagerConfigMaps(configmap *corev1.ConfigMap) error {
 	// get contact points and notification policies from logz.io for comparison
 	logzioContactPoints, err := c.logzioGrafanaAlertsClient.GetLogzioGrafanaContactPoints()
 	if err != nil {
@@ -259,90 +281,98 @@ func (c *Controller) processAlertManagerConfigMaps(cmList *corev1.ConfigMapList)
 		utilruntime.HandleError(err)
 		return err
 	}
-	receivers, routes := c.getClusterReceiversAndRoutes(cmList)
 
-	// TODO remove redundant log
-	klog.Info(routes, logzioNotificationPolicies)
+	// get receivers and routes from alert manager configmap
+	receivers, routes := c.getClusterReceiversAndRoutes(configmap)
 
+	//contactPointsMap := make(map[string]grafana_contact_points.GrafanaContactPoint)
+	//for _, contactPoint := range logzioContactPoints {
+	//	contactPointsMap[contactPoint.Name] = contactPoint
+	//}
 	// Creating maps for efficient lookups
-	contactPointsMap := make(map[string]grafana_contact_points.GrafanaContactPoint)
-	for _, contactPoint := range logzioContactPoints {
-		contactPointsMap[contactPoint.Name] = contactPoint
-	}
+
 	receiversMap := make(map[string]alert_manager_config.Receiver)
 	for _, receiver := range receivers {
 		receiversMap[receiver.Name] = receiver
 	}
-	c.processContactPoints(receiversMap, contactPointsMap)
+	c.processContactPoints(receiversMap, logzioContactPoints)
+
+	// TODO remove redundant log
+	klog.Info(routes, logzioNotificationPolicies)
 
 	return nil
 }
 
-func (c *Controller) processContactPoints(receiversMap map[string]alert_manager_config.Receiver, logzioContactPoints map[string]grafana_contact_points.GrafanaContactPoint) {
-	toAdd, toUpdate, toDelete := c.compareContactPoints(receiversMap, logzioContactPoints)
-	klog.Infof("Contact points summary: to add: %d, to update: %d, to delete: %d", len(toAdd), len(toUpdate), len(toDelete))
-	if len(toAdd) > 0 {
-		// TODO handle
-	}
-	if len(toUpdate) > 0 {
-		// TODO handle
-	}
-	if len(toDelete) > 0 {
-		// TODO handle
-	}
-}
-
-// compareContactPoints
-func (c *Controller) compareContactPoints(receiversMap map[string]alert_manager_config.Receiver, logzioContactPoints map[string]grafana_contact_points.GrafanaContactPoint) (toAdd, toUpdate []alert_manager_config.Receiver, toDelete []grafana_contact_points.GrafanaContactPoint) {
-	// Determine rules to add or update.
-	for receiverName, receiver := range receiversMap {
-		contactPoint, exists := logzioContactPoints[receiverName]
-		if !exists {
-			// Contact point doesn't exist in Logz.io, needs to be added.
-			toAdd = append(toAdd, receiver)
-		} else if !common.IsContactPointEqual(receiver, contactPoint) {
-			// Contact point exists but differs, needs to be updated.
-			toUpdate = append(toUpdate, receiver)
-		}
-	}
-	// Determine contact points from logzio to delete.
-	for contactPointName, contactPoint := range logzioContactPoints {
-		if _, exists := receiversMap[contactPointName]; !exists {
-			// Contact point exists in Logz.io but not in alert manager, needs to be deleted.
-			toDelete = append(toDelete, contactPoint)
-		}
-	}
-	return toAdd, toUpdate, toDelete
-}
-
-func (c *Controller) getClusterReceiversAndRoutes(cmList *corev1.ConfigMapList) ([]alert_manager_config.Receiver, []*alert_manager_config.Route) {
-	var routes []*alert_manager_config.Route
-	var receivers []alert_manager_config.Receiver
-	for _, cm := range cmList.Items {
-		if c.isAlertManagerConfigMap(&cm) {
-			for _, value := range cm.Data {
-				alertManagerConfig, err := alert_manager_config.Load(value)
-				if err != nil {
-					// TODO add descriptive error
-					klog.Error()
-					return nil, nil
-				}
-				routes = append(routes, alertManagerConfig.Route.Routes...)
-				receivers = append(receivers, alertManagerConfig.Receivers...)
+func (c *Controller) getClusterReceiversAndRoutes(configmap *corev1.ConfigMap) (receivers []alert_manager_config.Receiver, routes []*alert_manager_config.Route) {
+	if c.isAlertManagerConfigMap(configmap) {
+		for _, value := range configmap.Data {
+			alertManagerConfig, err := alert_manager_config.Load(value)
+			if err != nil {
+				utilruntime.HandleError(fmt.Errorf("unable to load alert manager config; %s", err))
+				return nil, nil
 			}
+			// Add prefix to distinguish between alert manager imported from alert manager and logz.io custom contact points
+			stub := common.CreateNameStub(configmap)
+			for _, receiver := range alertManagerConfig.Receivers {
+				receiver.Name = fmt.Sprintf("%s-%s-%s", c.envId, stub, receiver.Name)
+				receivers = append(receivers, receiver)
+
+			}
+			for _, route := range alertManagerConfig.Route.Routes {
+				route.Receiver = fmt.Sprintf("%s-%s-%s", c.envId, stub, route.Receiver)
+				routes = append(routes, route)
+			}
+			// setting the `AlertManagerGlobalConfig` context for logzio grafana alerts client
+			c.logzioGrafanaAlertsClient.AlertManagerGlobalConfig = alertManagerConfig.Global
 		}
 	}
 	return receivers, routes
 }
 
-// getConfigMap returns the ConfigMap with the specified name in the specified namespace, or nil if no such ConfigMap exists.
-func (c *Controller) getConfigMap(namespace, name string) (*corev1.ConfigMap, error) {
-	configmap, err := c.configmapsLister.ConfigMaps(namespace).Get(name)
-	if errors.IsNotFound(err) {
-		utilruntime.HandleError(fmt.Errorf("configmap '%s' in work queue no longer exists", name))
-		return nil, nil
+func (c *Controller) processContactPoints(receiversMap map[string]alert_manager_config.Receiver, logzioContactPoints []grafana_contact_points.GrafanaContactPoint) {
+	contactPointsToAdd, contactPointsToUpdate, contactPointsToDelete := c.compareContactPoints(receiversMap, logzioContactPoints)
+	klog.Infof("Contact points summary: to add: %d, to update: %d, to delete: %d", len(contactPointsToAdd), len(contactPointsToUpdate), len(contactPointsToDelete))
+	if len(contactPointsToAdd) > 0 {
+		c.logzioGrafanaAlertsClient.WriteContactPoints(contactPointsToAdd)
 	}
-	return configmap, err
+	if len(contactPointsToUpdate) > 0 {
+		c.logzioGrafanaAlertsClient.UpdateContactPoints(contactPointsToUpdate, logzioContactPoints)
+	}
+	if len(contactPointsToDelete) > 0 {
+		c.logzioGrafanaAlertsClient.DeleteContactPoints(contactPointsToDelete)
+	}
+}
+
+// compareContactPoints
+func (c *Controller) compareContactPoints(receiversMap map[string]alert_manager_config.Receiver, logzioContactPoints []grafana_contact_points.GrafanaContactPoint) (contactPointsToAdd, contactPointsToUpdate []alert_manager_config.Receiver, contactPointsToDelete []grafana_contact_points.GrafanaContactPoint) {
+	// Initialize a map with slices as values for Logz.io contact points
+	existingContactPoints := make(map[string][]grafana_contact_points.GrafanaContactPoint)
+	for _, contactPoint := range logzioContactPoints {
+		existingContactPoints[contactPoint.Name] = append(existingContactPoints[contactPoint.Name], contactPoint)
+	}
+	// Iterate over receivers to find which ones to add or update
+	for receiverName, receiver := range receiversMap {
+		_, exists := existingContactPoints[receiverName]
+		if !exists {
+			// If the receiver does not exist in Logz.io contact points, add it
+			contactPointsToAdd = append(contactPointsToAdd, receiver)
+		} else {
+			// If the receiver exists in Logz.io contact points, override with the alert manager receiver state
+			contactPointsToUpdate = append(contactPointsToUpdate, receiver)
+		}
+	}
+	// Iterate over Logz.io contact points to find which ones to delete
+	for _, contactPoints := range existingContactPoints {
+		for _, contactPoint := range contactPoints {
+			if _, exists := receiversMap[contactPoint.Name]; !exists {
+				// If the Logz.io contact point does not exist among the receivers, delete it
+
+				contactPointsToDelete = append(contactPointsToDelete, contactPoint)
+			}
+		}
+	}
+
+	return contactPointsToAdd, contactPointsToUpdate, contactPointsToDelete
 }
 
 // processRulesConfigMaps gets the state of alert rules from both cluster configmaps and logz.io, compares the rules and decide what crud operations to perform
@@ -369,31 +399,23 @@ func (c *Controller) processRulesConfigMaps(mapList *corev1.ConfigMapList) error
 	for _, alert := range logzioAlertRules {
 		logzioRulesMap[alert.Title] = alert
 	}
-	toAdd, toUpdate, toDelete := c.compareAlertRules(rulesMap, logzioRulesMap)
-	klog.Infof("Alert rules summary: to add: %d, to update: %d, to delete: %d", len(toAdd), len(toUpdate), len(toDelete))
-
-	if len(toAdd) > 0 {
-		c.logzioGrafanaAlertsClient.WriteRules(toAdd, folderUid)
-	}
-	if len(toUpdate) > 0 {
-		c.logzioGrafanaAlertsClient.UpdateRules(toUpdate, logzioRulesMap, folderUid)
-	}
-	if len(toDelete) > 0 {
-		c.logzioGrafanaAlertsClient.DeleteRules(toDelete, folderUid)
-	}
-
+	c.processAlertRules(rulesMap, logzioRulesMap, folderUid)
 	return nil
 }
 
-// enqueueConfigMap get the cm on the workqueue
-func (c *Controller) enqueueConfigMap(obj interface{}) {
-	var key string
-	var err error
-	if key, err = cache.MetaNamespaceKeyFunc(obj); err != nil {
-		utilruntime.HandleError(err)
-		return
+func (c *Controller) processAlertRules(rulesMap map[string]rulefmt.RuleNode, logzioRulesMap map[string]grafana_alerts.GrafanaAlertRule, folderUid string) {
+	rulesToAdd, rulesToUpdate, rulesToDelete := c.compareAlertRules(rulesMap, logzioRulesMap)
+	klog.Infof("Alert rules summary: to add: %d, to update: %d, to delete: %d", len(rulesToAdd), len(rulesToUpdate), len(rulesToDelete))
+
+	if len(rulesToAdd) > 0 {
+		c.logzioGrafanaAlertsClient.WriteRules(rulesToAdd, folderUid)
 	}
-	c.workqueue.Add(key)
+	if len(rulesToUpdate) > 0 {
+		c.logzioGrafanaAlertsClient.UpdateRules(rulesToUpdate, logzioRulesMap, folderUid)
+	}
+	if len(rulesToDelete) > 0 {
+		c.logzioGrafanaAlertsClient.DeleteRules(rulesToDelete, folderUid)
+	}
 }
 
 // getClusterAlertRules builds a list of rules from all the configmaps in the cluster
@@ -471,16 +493,16 @@ func (c *Controller) extractRules(value string) (error, rulefmt.RuleNode) {
 
 // compareAlertRules compares the rules from Kubernetes with those in Logz.io.
 // It returns three slices of rulefmt.RuleNode and grafana_alerts.GrafanaAlertRule indicating which rules to add, update, or delete.
-func (c *Controller) compareAlertRules(k8sRulesMap map[string]rulefmt.RuleNode, logzioRulesMap map[string]grafana_alerts.GrafanaAlertRule) (toAdd, toUpdate []rulefmt.RuleNode, toDelete []grafana_alerts.GrafanaAlertRule) {
+func (c *Controller) compareAlertRules(k8sRulesMap map[string]rulefmt.RuleNode, logzioRulesMap map[string]grafana_alerts.GrafanaAlertRule) (rulesToAdd, rulesToUpdate []rulefmt.RuleNode, rulesToDelete []grafana_alerts.GrafanaAlertRule) {
 	// Determine rules to add or update.
 	for alertName, k8sRule := range k8sRulesMap {
 		logzioRule, exists := logzioRulesMap[alertName]
 		if !exists {
 			// Alert doesn't exist in Logz.io, needs to be added.
-			toAdd = append(toAdd, k8sRule)
+			rulesToAdd = append(rulesToAdd, k8sRule)
 		} else if !common.IsAlertEqual(k8sRule, logzioRule) {
 			// Alert exists but differs, needs to be updated.
-			toUpdate = append(toUpdate, k8sRule)
+			rulesToUpdate = append(rulesToUpdate, k8sRule)
 		}
 	}
 
@@ -488,11 +510,11 @@ func (c *Controller) compareAlertRules(k8sRulesMap map[string]rulefmt.RuleNode, 
 	for alertName := range logzioRulesMap {
 		if _, exists := k8sRulesMap[alertName]; !exists {
 			// Alert is in Logz.io but not in Kubernetes, needs to be deleted.
-			toDelete = append(toDelete, logzioRulesMap[alertName])
+			rulesToDelete = append(rulesToDelete, logzioRulesMap[alertName])
 		}
 	}
 
-	return toAdd, toUpdate, toDelete
+	return rulesToAdd, rulesToUpdate, rulesToDelete
 }
 
 // isRuleConfigMap checks if the configmap is a rule configmap
