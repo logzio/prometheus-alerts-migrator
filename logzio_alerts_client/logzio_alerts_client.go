@@ -70,9 +70,11 @@ type LogzioGrafanaAlertsClient struct {
 	logzioNotificationPolicyClient *grafana_notification_policies.GrafanaNotificationPolicyClient
 	rulesDataSource                string
 	envId                          string
+	ignoreSlackText                bool
+	ignoreSlackTitle               bool
 }
 
-func NewLogzioGrafanaAlertsClient(logzioApiToken string, logzioApiUrl string, rulesDs string, envId string) *LogzioGrafanaAlertsClient {
+func NewLogzioGrafanaAlertsClient(logzioApiToken string, logzioApiUrl string, rulesDs string, envId string, ignoreSlackText bool, ignoreSlackTitle bool) *LogzioGrafanaAlertsClient {
 	logzioAlertClient, err := grafana_alerts.New(logzioApiToken, logzioApiUrl)
 	if err != nil {
 		klog.Errorf("Failed to create logzio alert client: %v", err)
@@ -116,6 +118,8 @@ func NewLogzioGrafanaAlertsClient(logzioApiToken string, logzioApiUrl string, ru
 		logzioNotificationPolicyClient: logzioNotificationPolicyClient,
 		rulesDataSource:                rulesDsData.Uid,
 		envId:                          envId,
+		ignoreSlackText:                ignoreSlackText,
+		ignoreSlackTitle:               ignoreSlackTitle,
 	}
 }
 
@@ -283,10 +287,15 @@ func (l *LogzioGrafanaAlertsClient) generateGrafanaContactPoint(receiver alert_m
 			Settings: map[string]interface{}{
 				"url":       url,
 				"recipient": slackConfig.Channel,
-				"text":      slackConfig.Text,
-				"title":     slackConfig.Title,
 				"username":  slackConfig.Username,
 			},
+		}
+		// Adding title and text fields based on program flags
+		if !l.ignoreSlackTitle {
+			contactPoint.Settings["title"] = slackConfig.Title
+		}
+		if !l.ignoreSlackText {
+			contactPoint.Settings["text"] = slackConfig.Text
 		}
 		contactPointsList = append(contactPointsList, contactPoint)
 	}

@@ -70,12 +70,7 @@ type MultiRuleGroups struct {
 func NewController(
 	kubeclientset *kubernetes.Clientset,
 	configmapInformer corev1informers.ConfigMapInformer,
-	rulesAnnotation *string,
-	alertManagerAnnotation *string,
-	logzioApiToken string,
-	logzioApiUrl string,
-	rulesDs string,
-	envId string,
+	config common.Config,
 ) *Controller {
 
 	utilruntime.Must(scheme.AddToScheme(scheme.Scheme))
@@ -84,7 +79,7 @@ func NewController(
 	eventBroadcaster.StartLogging(klog.Infof)
 	eventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: kubeclientset.CoreV1().Events("")})
 	recorder := eventBroadcaster.NewRecorder(scheme.Scheme, corev1.EventSource{Component: controllerAgentName})
-	logzioGrafanaAlertsClient := logzio_alerts_client.NewLogzioGrafanaAlertsClient(logzioApiToken, logzioApiUrl, rulesDs, envId)
+	logzioGrafanaAlertsClient := logzio_alerts_client.NewLogzioGrafanaAlertsClient(config.LogzioAPIToken, config.LogzioAPIURL, config.RulesDS, config.EnvID, config.IgnoreSlackText, config.IgnoreSlackTitle)
 	if logzioGrafanaAlertsClient == nil {
 		klog.Errorf("Failed to create logzio grafana alerts client")
 		return nil
@@ -96,11 +91,11 @@ func NewController(
 		configmapsSynced:          configmapInformer.Informer().HasSynced,
 		workqueue:                 workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter()),
 		recorder:                  recorder,
-		rulesAnnotation:           rulesAnnotation,
-		alertManagerAnnotation:    alertManagerAnnotation,
+		rulesAnnotation:           &config.RulesAnnotation,
+		alertManagerAnnotation:    &config.AlertManagerAnnotation,
 		resourceVersionMap:        make(map[string]string),
 		logzioGrafanaAlertsClient: logzioGrafanaAlertsClient,
-		envId:                     envId,
+		envId:                     config.EnvID,
 	}
 
 	controller.configmapEventRecorderFunc = controller.recordEventOnConfigMap

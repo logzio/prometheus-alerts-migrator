@@ -1,6 +1,7 @@
 package common
 
 import (
+	"flag"
 	"fmt"
 	"github.com/logzio/logzio_terraform_client/grafana_alerts"
 	"github.com/prometheus/prometheus/model/rulefmt"
@@ -8,6 +9,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/homedir"
+	"k8s.io/klog/v2"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -25,6 +27,91 @@ const (
 	TypeEmail     = "email"
 	TypePagerDuty = "pagerduty" // # of letter indices fitting in 63 bits
 )
+
+// NewConfig creates a Config struct, populating it with values from command-line flags and environment variables.
+func NewConfig() *Config {
+	// Define flags
+	helpFlag := flag.Bool("help", false, "Display help")
+	rulesConfigmapAnnotation := flag.String("rules-annotation", "prometheus.io/kube-rules", "Annotation that states that this configmap contains prometheus rules")
+	alertManagerConfigmapAnnotation := flag.String("alertmanager-annotation", "prometheus.io/kube-alertmanager", "Annotation that states that this configmap contains alertmanager configuration")
+	logzioAPITokenFlag := flag.String("logzio-api-token", "", "LOGZIO API token")
+	logzioAPIURLFlag := flag.String("logzio-api-url", "https://api.logz.io", "LOGZIO API URL")
+	rulesDSFlag := flag.String("rules-ds", "", "name of the data source for the alert rules")
+	envIDFlag := flag.String("env-id", "my-env", "environment identifier, usually cluster name")
+	workerCountFlag := flag.Int("workers", 2, "The number of workers to process the alerts")
+	ignoreSlackTextFlag := flag.Bool("ignore-slack-text", false, "Ignore slack text field")
+	ignoreSlackTitleFlag := flag.Bool("ignore-slack-title", false, "Ignore slack title field")
+
+	// Parse the flags
+	flag.Parse()
+
+	if *helpFlag {
+		flag.PrintDefaults()
+		os.Exit(0)
+	}
+
+	// Environment variables have lower precedence than flags
+	logzioAPIURL := getEnvWithFallback("LOGZIO_API_URL", *logzioAPIURLFlag)
+	envID := getEnvWithFallback("ENV_ID", *envIDFlag)
+
+	ignoreSlackText := getEnvWithFallback("IGNORE_SLACK_TEXT", strconv.FormatBool(*ignoreSlackTextFlag))
+	ignoreSlackTextBool, err := strconv.ParseBool(ignoreSlackText)
+	if err != nil {
+		klog.Fatal("Invalid value for IGNORE_SLACK_TEXT")
+	}
+
+	ignoreSlackTitle := getEnvWithFallback("IGNORE_SLACK_TITLE", strconv.FormatBool(*ignoreSlackTitleFlag))
+	ignoreSlackTitleBool, err := strconv.ParseBool(ignoreSlackTitle)
+	if err != nil {
+		klog.Fatal("Invalid value for IGNORE_SLACK_TITLE")
+	}
+
+	// api token is mandatory
+	logzioAPIToken := getEnvWithFallback("LOGZIO_API_TOKEN", *logzioAPITokenFlag)
+	if logzioAPIToken == "" {
+		klog.Fatal("No logzio api token provided")
+	}
+	rulesDS := getEnvWithFallback("RULES_DS", *rulesDSFlag)
+	if rulesDS == "" {
+		klog.Fatal("No rules data source provided")
+	}
+	// Annotation must be provided either by flag or environment variable
+	rulesAnnotation := getEnvWithFallback("RULES_CONFIGMAP_ANNOTATION", *rulesConfigmapAnnotation)
+	if rulesAnnotation == "" {
+		klog.Fatal("No rules configmap annotation provided")
+	}
+	// Annotation must be provided either by flag or environment variable
+	alertManagerAnnotation := getEnvWithFallback("ALERTMANAGER_CONFIGMAP_ANNOTATION", *alertManagerConfigmapAnnotation)
+	if alertManagerAnnotation == "" {
+		klog.Fatal("No alert manager configmap annotation provided")
+	}
+	workerCountStr := getEnvWithFallback("WORKERS_COOUNT", strconv.Itoa(*workerCountFlag))
+	workerCount, err := strconv.Atoi(workerCountStr)
+
+	if err != nil {
+		workerCount = 2 // default value
+	}
+
+	return &Config{
+		RulesAnnotation:        rulesAnnotation,
+		AlertManagerAnnotation: alertManagerAnnotation,
+		LogzioAPIToken:         logzioAPIToken,
+		LogzioAPIURL:           logzioAPIURL,
+		RulesDS:                rulesDS,
+		EnvID:                  envID,
+		WorkerCount:            workerCount,
+		IgnoreSlackText:        ignoreSlackTextBool,
+		IgnoreSlackTitle:       ignoreSlackTitleBool,
+	}
+}
+
+// getEnvWithFallback tries to get the value from an environment variable and falls back to the given default value if not found.
+func getEnvWithFallback(envName, defaultValue string) string {
+	if value, exists := os.LookupEnv(envName); exists {
+		return value
+	}
+	return defaultValue
+}
 
 // GenerateRandomString borrowed from here https://stackoverflow.com/questions/22892120/how-to-generate-a-random-string-of-a-fixed-length-in-go
 func GenerateRandomString(n int) string {
@@ -118,4 +205,17 @@ func GetConfig() (*rest.Config, error) {
 	}
 
 	return config, nil
+}
+
+// Config holds all the configuration needed for the application to run.
+type Config struct {
+	RulesAnnotation        string
+	AlertManagerAnnotation string
+	LogzioAPIToken         string
+	LogzioAPIURL           string
+	RulesDS                string
+	EnvID                  string
+	WorkerCount            int
+	IgnoreSlackText        bool
+	IgnoreSlackTitle       bool
 }
