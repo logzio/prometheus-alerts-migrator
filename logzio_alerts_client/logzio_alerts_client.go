@@ -11,7 +11,9 @@ import (
 	"github.com/logzio/prometheus-alerts-migrator/common"
 	alert_manager_config "github.com/prometheus/alertmanager/config"
 	"github.com/prometheus/prometheus/model/rulefmt"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/klog/v2"
+	"regexp"
 	"strings"
 )
 
@@ -115,6 +117,96 @@ func NewLogzioGrafanaAlertsClient(logzioApiToken string, logzioApiUrl string, ru
 		rulesDataSource:                rulesDsData.Uid,
 		envId:                          envId,
 	}
+}
+
+// SetNotificationPolicyTree converts route tree to grafana notification policy tree and writes it to logz.io
+func (l *LogzioGrafanaAlertsClient) SetNotificationPolicyTree(routeTree *alert_manager_config.Route) {
+	// getting logzio contact points to ensure it exists for the notification policy tree
+	logzioContactPoints, err := l.GetLogzioManagedGrafanaContactPoints()
+	if err != nil {
+		klog.Errorf("Failed to get logz.io managed contact points: %v", err)
+		return
+	}
+	// create contact points map for efficient lookup
+	existingContactPoints := make(map[string]bool)
+	for _, contactPoint := range logzioContactPoints {
+		existingContactPoints[contactPoint.Name] = true
+	}
+	notificationPolicyTree := l.convertRouteTreeToNotificationPolicyTree(routeTree, existingContactPoints)
+	err = l.logzioNotificationPolicyClient.SetupGrafanaNotificationPolicyTree(notificationPolicyTree)
+	if err != nil {
+		klog.Errorf("Failed to create notification policy tree: %v", err)
+	}
+}
+
+func (l *LogzioGrafanaAlertsClient) convertRouteTreeToNotificationPolicyTree(routeTree *alert_manager_config.Route, existingContactPoints map[string]bool) (notificationPolicyTree grafana_notification_policies.GrafanaNotificationPolicyTree) {
+	// checking for empty values to avoid nil pointer errors
+	if routeTree.GroupByStr != nil {
+		notificationPolicyTree.GroupBy = routeTree.GroupByStr
+	}
+	if routeTree.GroupInterval != nil {
+		notificationPolicyTree.GroupInterval = routeTree.GroupInterval.String()
+	}
+	if routeTree.GroupWait != nil {
+		notificationPolicyTree.GroupWait = routeTree.GroupWait.String()
+	}
+	if routeTree.RepeatInterval != nil {
+		notificationPolicyTree.RepeatInterval = routeTree.RepeatInterval.String()
+	}
+	notificationPolicyTree.Receiver = routeTree.Receiver
+	for _, childRoute := range routeTree.Routes {
+		// check if the receiver of the child route exists in `existingContactPoints`
+		if _, ok := existingContactPoints[childRoute.Receiver]; ok {
+			notificationPolicy := l.generateGrafanaNotificationPolicy(childRoute)
+			notificationPolicyTree.Routes = append(notificationPolicyTree.Routes, notificationPolicy)
+		}
+	}
+	return notificationPolicyTree
+}
+
+// generateGrafanaNotificationPolicy generates a GrafanaNotificationPolicy from a alert_manager_config.Route
+func (l *LogzioGrafanaAlertsClient) generateGrafanaNotificationPolicy(route *alert_manager_config.Route) (notificationPolicy grafana_notification_policies.GrafanaNotificationPolicy) {
+	// checking for empty values to avoid nil pointer errors
+	if route.GroupInterval != nil {
+		notificationPolicy.GroupInterval = route.GroupInterval.String()
+	}
+	if route.GroupWait != nil {
+		notificationPolicy.GroupWait = route.GroupWait.String()
+	}
+	if route.RepeatInterval != nil {
+		notificationPolicy.RepeatInterval = route.RepeatInterval.String()
+	}
+	if route.GroupByStr != nil {
+		notificationPolicy.GroupBy = route.GroupByStr
+	}
+	notificationPolicy.Receiver = route.Receiver
+	routeMatchersYaml, err := route.Matchers.MarshalYAML()
+	if err != nil {
+		utilruntime.HandleError(err)
+		return grafana_notification_policies.GrafanaNotificationPolicy{}
+	}
+	// converting the route matchers to the Grafana format
+	routeMatchersList := routeMatchersYaml.([]string)
+	grafanaObjMatchers := grafana_notification_policies.MatchersObj{}
+	for _, routeMatcher := range routeMatchersList {
+		// we split the route matcher by the regex (=|~|=|!=) to convert it to the Grafana format
+		regex := regexp.MustCompile(`(=|~=?|!=)`)
+		parts := regex.FindStringSubmatchIndex(routeMatcher)
+		if len(parts) > 0 {
+			// Extracting the key, operator, and value
+			key := routeMatcher[:parts[0]]
+			operator := routeMatcher[parts[0]:parts[1]]
+			value := routeMatcher[parts[1]:]
+			grafanaObjMatchers = append(grafanaObjMatchers, grafana_notification_policies.MatcherObj{key, operator, value})
+		}
+	}
+	notificationPolicy.ObjectMatchers = grafanaObjMatchers
+	// repeat the process for nested policies
+	for _, childRoute := range route.Routes {
+		childNotificationPolicy := l.generateGrafanaNotificationPolicy(childRoute)
+		notificationPolicy.Routes = append(notificationPolicy.Routes, childNotificationPolicy)
+	}
+	return notificationPolicy
 }
 
 // WriteContactPoints writes the contact points to logz.io

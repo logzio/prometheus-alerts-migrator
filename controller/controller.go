@@ -270,20 +270,15 @@ func (c *Controller) getConfigMap(namespace, name string) (*corev1.ConfigMap, er
 }
 
 func (c *Controller) processAlertManagerConfigMaps(configmap *corev1.ConfigMap) error {
-	// get contact points and notification policies from logz.io for comparison
+	// get contact points from logz.io for comparison
 	logzioContactPoints, err := c.logzioGrafanaAlertsClient.GetLogzioManagedGrafanaContactPoints()
-	if err != nil {
-		utilruntime.HandleError(err)
-		return err
-	}
-	logzioNotificationPolicies, err := c.logzioGrafanaAlertsClient.GetLogzioGrafanaNotificationPolicies()
 	if err != nil {
 		utilruntime.HandleError(err)
 		return err
 	}
 
 	// get receivers and routes from alert manager configmap
-	receivers, routes := c.getClusterReceiversAndRoutes(configmap)
+	receivers, routeTree := c.getClusterReceiversAndRoutes(configmap)
 	// Creating maps for efficient lookups
 	receiversMap := make(map[string]alert_manager_config.Receiver)
 	for _, receiver := range receivers {
@@ -292,19 +287,21 @@ func (c *Controller) processAlertManagerConfigMaps(configmap *corev1.ConfigMap) 
 
 	c.processContactPoints(receiversMap, logzioContactPoints)
 
-	// TODO remove redundant log
-	klog.Info(routes, logzioNotificationPolicies)
+	// Handle the notification policies after contact points are processed, to prevent missing contact points at logzio
+	c.logzioGrafanaAlertsClient.SetNotificationPolicyTree(routeTree)
 
 	return nil
 }
 
-func (c *Controller) getClusterReceiversAndRoutes(configmap *corev1.ConfigMap) (receivers []alert_manager_config.Receiver, routes []*alert_manager_config.Route) {
+func (c *Controller) getClusterReceiversAndRoutes(configmap *corev1.ConfigMap) ([]alert_manager_config.Receiver, *alert_manager_config.Route) {
+	var receivers []alert_manager_config.Receiver
+	var routeTree alert_manager_config.Route
 	if c.isAlertManagerConfigMap(configmap) {
 		for _, value := range configmap.Data {
 			alertManagerConfig, err := alert_manager_config.Load(value)
 			if err != nil {
 				utilruntime.HandleError(fmt.Errorf("unable to load alert manager config; %s", err))
-				return nil, nil
+				return nil, &alert_manager_config.Route{}
 			}
 			// Add prefix to distinguish between alert manager imported from alert manager and logz.io custom contact points
 			stub := common.CreateNameStub(configmap)
@@ -313,15 +310,17 @@ func (c *Controller) getClusterReceiversAndRoutes(configmap *corev1.ConfigMap) (
 				receivers = append(receivers, receiver)
 
 			}
-			for _, route := range alertManagerConfig.Route.Routes {
+			// Add prefix to routes to match with contact points
+			routeTree = *alertManagerConfig.Route
+			routeTree.Receiver = fmt.Sprintf("%s-%s-%s", c.envId, stub, routeTree.Receiver)
+			for _, route := range routeTree.Routes {
 				route.Receiver = fmt.Sprintf("%s-%s-%s", c.envId, stub, route.Receiver)
-				routes = append(routes, route)
 			}
 			// setting the `AlertManagerGlobalConfig` context for logzio grafana alerts client
 			c.logzioGrafanaAlertsClient.AlertManagerGlobalConfig = alertManagerConfig.Global
 		}
 	}
-	return receivers, routes
+	return receivers, &routeTree
 }
 
 func (c *Controller) processContactPoints(receiversMap map[string]alert_manager_config.Receiver, logzioContactPoints []grafana_contact_points.GrafanaContactPoint) {
@@ -361,7 +360,6 @@ func (c *Controller) compareContactPoints(receiversMap map[string]alert_manager_
 		for _, contactPoint := range contactPoints {
 			if _, exists := receiversMap[contactPoint.Name]; !exists {
 				// If the Logz.io contact point does not exist among the receivers, delete it
-
 				contactPointsToDelete = append(contactPointsToDelete, contactPoint)
 			}
 		}
