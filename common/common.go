@@ -85,7 +85,7 @@ func NewConfig() *Config {
 	if alertManagerAnnotation == "" {
 		klog.Fatal("No alert manager configmap annotation provided")
 	}
-	workerCountStr := getEnvWithFallback("WORKERS_COOUNT", strconv.Itoa(*workerCountFlag))
+	workerCountStr := getEnvWithFallback("WORKERS_COUNT", strconv.Itoa(*workerCountFlag))
 	workerCount, err := strconv.Atoi(workerCountStr)
 
 	if err != nil {
