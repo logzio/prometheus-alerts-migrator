@@ -13,7 +13,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	"log"
-	"os"
 	"testing"
 	"time"
 )
@@ -88,16 +87,12 @@ func TestControllerE2E(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create Kubernetes clientset: %v", err)
 	}
-	logzioUrl := os.Getenv("LOGZIO_API_URL")
-	logzioAPIToken := os.Getenv("LOGZIO_API_TOKEN")
-	rulesDS := os.Getenv("RULES_DS")
-	rulesAnnotation := os.Getenv("RULES_CONFIGMAP_ANNOTATION")
-	alertManagerAnnotation := os.Getenv("ALERTMANAGER_CONFIGMAP_ANNOTATION")
+	ctlConfig := common.NewConfig()
 	kubeInformerFactory := informers.NewSharedInformerFactory(clientset, time.Second*30)
 	// set up signals so we handle the first shutdown signal gracefully
 	stopCh := signals.SetupSignalHandler()
 	// Instantiate the controller
-	ctrl := NewController(clientset, kubeInformerFactory.Core().V1().ConfigMaps(), &rulesAnnotation, &alertManagerAnnotation, logzioAPIToken, logzioUrl, rulesDS, "integration-test")
+	ctrl := NewController(clientset, kubeInformerFactory.Core().V1().ConfigMaps(), *ctlConfig)
 
 	// defer cleanup
 	defer cleanupLogzioAlerts(*ctrl)

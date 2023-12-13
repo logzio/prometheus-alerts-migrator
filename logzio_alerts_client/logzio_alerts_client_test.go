@@ -1,20 +1,18 @@
 package logzio_alerts_client
 
 import (
+	"github.com/logzio/prometheus-alerts-migrator/common"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/rulefmt"
 	"gopkg.in/yaml.v3"
-	"os"
 	"reflect"
 	"testing"
 	"time"
 )
 
 func generateTestLogzioGrafanaAlertsClient() *LogzioGrafanaAlertsClient {
-	logzioUrl := os.Getenv("LOGZIO_API_URL")
-	logzioAPIToken := os.Getenv("LOGZIO_API_TOKEN")
-	rulesDS := os.Getenv("RULES_DS")
-	logzioGrafanaAlertsClient := NewLogzioGrafanaAlertsClient(logzioUrl, logzioAPIToken, rulesDS, "integration-test")
+	ctlConfig := common.NewConfig()
+	logzioGrafanaAlertsClient := NewLogzioGrafanaAlertsClient(ctlConfig.LogzioAPIToken, ctlConfig.LogzioAPIURL, ctlConfig.RulesDS, ctlConfig.EnvID, ctlConfig.IgnoreSlackTitle, ctlConfig.IgnoreSlackTitle)
 	return logzioGrafanaAlertsClient
 
 }

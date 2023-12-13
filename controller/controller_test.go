@@ -10,7 +10,6 @@ import (
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
-	"os"
 	"reflect"
 	"testing"
 )
@@ -27,13 +26,9 @@ func generateTestController() *Controller {
 	if err != nil {
 		klog.Fatalf("Error building kubernetes clientset: %s", err)
 	}
-	logzioUrl := os.Getenv("LOGZIO_API_URL")
-	logzioAPIToken := os.Getenv("LOGZIO_API_TOKEN")
-	rulesDS := os.Getenv("RULES_DS")
+	ctlConfig := common.NewConfig()
 	kubeInformerFactory := informers.NewSharedInformerFactory(kubeClient, 0)
-	rulesAnnotation := "test-annotation"
-	alertManagerAnnotation := "am-test-annotation"
-	c := NewController(kubeClient, kubeInformerFactory.Core().V1().ConfigMaps(), &rulesAnnotation, &alertManagerAnnotation, logzioAPIToken, logzioUrl, rulesDS, "integration-test")
+	c := NewController(kubeClient, kubeInformerFactory.Core().V1().ConfigMaps(), *ctlConfig)
 	return c
 }
 
