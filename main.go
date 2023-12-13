@@ -44,7 +44,6 @@ func main() {
 
 	kubeInformerFactory := informers.NewSharedInformerFactory(kubeClient, time.Second*30)
 	ctl := controller.NewController(kubeClient, kubeInformerFactory.Core().V1().ConfigMaps(), *config)
-	//ctl := controller.NewController(kubeClient, kubeInformerFactory.Core().V1().ConfigMaps(), &config.RulesAnnotation, &config.AlertManagerAnnotation, config.LogzioAPIToken, config.LogzioAPIURL, config.RulesDS, config.EnvID)
 	if ctl == nil {
 		klog.Fatal("Error creating controller")
 	}
