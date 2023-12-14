@@ -50,7 +50,7 @@ func NewConfig() *Config {
 		os.Exit(0)
 	}
 
-	// Environment variables have lower precedence than flags
+	// Environment variables have higher precedence than flags
 	logzioAPIURL := getEnvWithFallback("LOGZIO_API_URL", *logzioAPIURLFlag)
 	envID := getEnvWithFallback("ENV_ID", *envIDFlag)
 
