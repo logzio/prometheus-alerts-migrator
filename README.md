@@ -33,12 +33,12 @@ To start using the controller:
 2. Navigate to the project directory.
 3. Run the controller `make run-local`.
 
-### ConfigMap Format
+### ConfigMap format
 The controller is designed to process ConfigMaps containing Prometheus alert rules. These ConfigMaps must be annotated with a specific key that matches the value of the `ANNOTATION` environment variable for the controller to process them.
 
-### Example ConfigMap
+### Example rules configMap
 
-Below is an example of how a ConfigMap should be structured:
+Below is an example of how a rules configMap should be structured:
 
 ```yaml
 apiVersion: v1
@@ -62,6 +62,63 @@ data:
 ```
 - Replace `prometheus.io/kube-rules` with the actual annotation you use to identify relevant ConfigMaps. The data section should contain your Prometheus alert rules in YAML format.
 - Deploy the configmap to your cluster `kubectl apply -f <configmap-file>.yml`
+
+### Example alert manager configMap
+
+Below is an example of how a alert manager ConfigMap should be structured:
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: logzio-rules
+  namespace: monitoring
+  annotations:
+    prometheus.io/kube-alertmanager: "true"
+data:
+  all_instances_down_otel_collector: |
+    global:
+      # Global configurations, adjust these to your SMTP server details
+      smtp_smarthost: 'smtp.example.com:587'
+      smtp_from: 'alertmanager@example.com'
+      smtp_auth_username: 'alertmanager'
+      smtp_auth_password: 'password'
+    # The root route on which each incoming alert enters.
+    route:
+      receiver: 'default-receiver'
+      group_by: ['alertname', 'env']
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 1h
+      # Child routes
+      routes:
+        - match:
+            env: production
+          receiver: 'slack-production'
+          continue: true
+        - match:
+            env: staging
+          receiver: 'slack-staging'
+          continue: true
+    
+    # Receivers defines ways to send notifications about alerts.
+    receivers:
+      - name: 'default-receiver'
+        email_configs:
+          - to: 'alerts@example.com'
+      - name: 'slack-production'
+        slack_configs:
+          - api_url: 'https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX'
+            channel: '#prod-alerts'
+      - name: 'slack-staging'
+        slack_configs:
+          - api_url: 'https://hooks.slack.com/services/T00000000/B11111111/YYYYYYYYYYYYYYYYYYYYYYYY'
+            channel: '#staging-alerts'
+
+```
+- Replace `prometheus.io/kube-alertmanager` with the actual annotation you use to identify relevant ConfigMaps. The data section should contain your Prometheus alert rules in YAML format.
+- Deploy the configmap to your cluster `kubectl apply -f <configmap-file>.yml`
+
 
 ## Changelog
 - v1.0.3
