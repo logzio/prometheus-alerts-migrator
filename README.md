@@ -8,6 +8,13 @@ Before running this software, ensure you have:
 - Access to a Kubernetes cluster
 - Logz.io account with API access
 
+## Supported contact point types
+- `Email`
+- `Slack`
+- `Pagerduty`
+
+More types will be supported in the future, If you have a specific request please post an issue with your request
+
 ## Configuration
 
 Configure the application using the following environment variables:
@@ -34,7 +41,7 @@ To start using the controller:
 3. Run the controller `make run-local`.
 
 ### ConfigMap format
-The controller is designed to process ConfigMaps containing Prometheus alert rules. These ConfigMaps must be annotated with a specific key that matches the value of the `ANNOTATION` environment variable for the controller to process them.
+The controller is designed to process ConfigMaps containing Prometheus alert rules and promethium alert manager configuration. These ConfigMaps must be annotated with a specific key that matches the value of the `RULES_CONFIGMAP_ANNOTATION` or `ALERTMANAGER_CONFIGMAP_ANNOTATION` environment variables for the controller to process them.
 
 ### Example rules configMap
 
