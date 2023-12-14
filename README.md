@@ -21,6 +21,8 @@ Configure the application using the following environment variables:
 | `RULES_DS`                          | The metrics data source name in logz.io for the Prometheus rules.                                 | `None`                            |
 | `ENV_ID`                            | Environment identifier, usually cluster name.                                                     | `my-env`                          |
 | `WORKER_COUNT`                      | The number of workers to process the alerts.                                                      | `2`                               |
+| `IGNORE_SLACK_TEXT`                 | Ignore slack contact points `text` field.                                                         | `flase`                           |
+| `IGNORE_SLACK_TITLE`                | Ignore slack contact points `title` field.                                                        | `false`                           |
 
 Please ensure to set all necessary environment variables before running the application.
 
@@ -62,6 +64,10 @@ data:
 - Deploy the configmap to your cluster `kubectl apply -f <configmap-file>.yml`
 
 ## Changelog
+- v1.0.3
+  - Handle Prometheus alert manager configuration file
+  - Add CRUD operations for contact points and notification policies
+  - Add `IGNORE_SLACK_TEXT` and `IGNORE_SLACK_TITLE` flags
 - v1.0.2
   - Add `reduce` query to alerts (grafana alerts can evaluate alerts only from reduced data)
 - v1.0.1

@@ -39,8 +39,8 @@ func NewConfig() *Config {
 	rulesDSFlag := flag.String("rules-ds", "", "name of the data source for the alert rules")
 	envIDFlag := flag.String("env-id", "my-env", "environment identifier, usually cluster name")
 	workerCountFlag := flag.Int("workers", 2, "The number of workers to process the alerts")
-	ignoreSlackTextFlag := flag.Bool("ignore-slack-text", false, "Ignore slack text field")
-	ignoreSlackTitleFlag := flag.Bool("ignore-slack-title", false, "Ignore slack title field")
+	ignoreSlackTextFlag := flag.Bool("ignore-slack-text", false, "Ignore slack contact points text field")
+	ignoreSlackTitleFlag := flag.Bool("ignore-slack-title", false, "Ignore slack contact points title field")
 
 	// Parse the flags
 	flag.Parse()
