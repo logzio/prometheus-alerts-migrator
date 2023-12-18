@@ -14,7 +14,7 @@ import (
 	"testing"
 )
 
-const annotation = "test-annotation"
+const annotation = "prometheus.io/kube-rules"
 
 func generateTestController() *Controller {
 	cfg, err := common.GetConfig()
@@ -127,7 +127,7 @@ func TestIsRuleConfigMap(t *testing.T) {
 			configMap: &v1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{
 					Annotations: map[string]string{
-						"test-annotation": "true",
+						annotation: "true",
 					},
 				},
 			},

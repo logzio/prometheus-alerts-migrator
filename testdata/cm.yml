@@ -59,9 +59,9 @@ data:
     annotations:
       description: "The Splunk OpenTelemetry collector is failing to export spans with the following protocol {% raw %}{{ $labels.exporter }}{% endraw %}"
       causes: "Service is most likely unhealthy"
-  all_instances_down_otel_collector_yotams: |
+  all_instances_down_otel_collector: |
     alert: Opentelemetry_Collector_Downq
-    expr: sum(up{app="opentelemetry-collectord", job="kubernetes-pods"}) == 0 or absent(up{app="opentelemetry-collector", job="kubernetes-pods"}) > 0
+    expr: sum(up{app="opentelemetry-collectordsd", job="kubernetes-pods"}) == 1 or absent(up{app="opentelemetry-collector", job="kubernetes-pods"}) > 0
     for: 5m
     labels:
       team: "sre"
@@ -71,7 +71,7 @@ data:
       causes: "Service is most likely down or fails healthchecks"
   all_instances_down_splunk_collectors: |
     alert: Splunk_Collector_Down
-    expr: sum(up{app="splunk-otel-collector", job="kubernetes-pods"}) == 0 or absent(up{app="splunk-otel-collector", job="kubernetes-pods"}) > 0
+    expr: sum(up{app="splunk-otel-collectorsd", job="kubernetes-pods"}) == 1 or absent(up{app="splunk-otel-collector", job="kubernetes-pods"}) > 0
     for: 5m
     labels:
       team: "sre"

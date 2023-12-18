@@ -2,9 +2,12 @@ package logzio_alerts_client
 
 import (
 	"github.com/logzio/prometheus-alerts-migrator/common"
+	"github.com/prometheus/alertmanager/config"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/rulefmt"
+	"github.com/stretchr/testify/assert"
 	"gopkg.in/yaml.v3"
+	"net/url"
 	"reflect"
 	"testing"
 	"time"
@@ -27,6 +30,13 @@ func TestGenerateGrafanaAlert(t *testing.T) {
 		Labels:      map[string]string{"severity": "critical"},
 		Annotations: map[string]string{"description": "Instance is down"},
 	}
+	invalidRule := rulefmt.RuleNode{
+		Alert:       yaml.Node{Value: "TestAlertInvalid"},
+		Expr:        yaml.Node{Value: "up as== 1sadsa"},
+		For:         model.Duration(5 * time.Minute),
+		Labels:      map[string]string{"severity": "critical"},
+		Annotations: map[string]string{"description": "Instance is down"},
+	}
 	baseFolderUid := "folder123"
 
 	// Test cases
@@ -41,6 +51,12 @@ func TestGenerateGrafanaAlert(t *testing.T) {
 			rule:      baseRule, // Already has annotations and labels
 			folderUid: baseFolderUid,
 			wantErr:   false,
+		},
+		{
+			name:      "invalid rule",
+			rule:      invalidRule,
+			folderUid: baseFolderUid,
+			wantErr:   true,
 		},
 	}
 
@@ -73,6 +89,75 @@ func TestGenerateGrafanaAlert(t *testing.T) {
 				if !reflect.DeepEqual(alertRule.Annotations, tc.rule.Annotations) {
 					t.Errorf("generateGrafanaAlert() Annotations = %v, want %v", alertRule.Annotations, tc.rule.Annotations)
 				}
+			}
+		})
+	}
+}
+
+func TestGenerateGrafanaContactPoint(t *testing.T) {
+	client := generateTestLogzioGrafanaAlertsClient()
+	testCases := []struct {
+		name           string
+		receiver       config.Receiver
+		expectedLength int
+		expectedType   string
+	}{
+		{
+			name: "Email Configuration",
+			receiver: config.Receiver{
+				EmailConfigs: []*config.EmailConfig{
+					{
+						To: "test@example.com",
+					},
+					{
+						To: "test2@example.com",
+					},
+				},
+			},
+			expectedLength: 2,
+			expectedType:   common.TypeEmail,
+		},
+		{
+			name: "Slack Configuration",
+			receiver: config.Receiver{
+				SlackConfigs: []*config.SlackConfig{
+					{
+						Channel: "#test",
+						APIURL: &config.SecretURL{
+							URL: &url.URL{
+								Scheme: "https",
+								Host:   "api.slack.com",
+								Path:   "/api/chat.postMessage",
+							},
+						},
+					},
+				},
+			},
+			expectedLength: 1,
+			expectedType:   common.TypeSlack,
+		},
+		{
+			name: "Pagerduty Configuration",
+			receiver: config.Receiver{
+				PagerdutyConfigs: []*config.PagerdutyConfig{
+					{
+						ServiceKey: "test",
+					},
+				},
+			},
+			expectedLength: 1,
+			expectedType:   common.TypePagerDuty,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			contactPoints := client.generateGrafanaContactPoint(tc.receiver)
+			assert.Len(t, contactPoints, tc.expectedLength, "Incorrect number of contact points generated")
+			// Assert the type of contact point
+			if tc.expectedLength > 0 {
+				assert.Equal(t, tc.expectedType, contactPoints[0].Type, "Incorrect type of contact point")
+				// Add more assertions to check other fields like settings, name, etc.
 			}
 		})
 	}

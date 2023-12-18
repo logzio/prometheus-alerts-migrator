@@ -6,13 +6,13 @@ import (
 	"github.com/logzio/prometheus-alerts-migrator/common"
 	"github.com/logzio/prometheus-alerts-migrator/pkg/signals"
 	"github.com/stretchr/testify/assert"
-	"io/ioutil"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	"log"
+	"os"
 	"testing"
 	"time"
 )
@@ -23,7 +23,7 @@ const testNamespace = "alert-migrator-test"
 func deployConfigMaps(clientset *kubernetes.Clientset, configs ...string) error {
 	for _, config := range configs {
 		// Read the YAML file content
-		yamlContent, err := ioutil.ReadFile(config)
+		yamlContent, err := os.ReadFile(config)
 		if err != nil {
 			return fmt.Errorf("failed to read YAML file %s: %v", config, err)
 		}
@@ -71,12 +71,11 @@ func cleanupLogzioAlerts(ctl Controller) {
 	if err != nil {
 		log.Fatalf("Failed to get logzio alerts: %v", err)
 	}
-	// defer cleanup
 	ctl.logzioGrafanaAlertsClient.DeleteRules(logzioAlerts, folderUid)
 }
 
 // TestControllerE2E is the main function that runs the end-to-end test
-func TestControllerE2E(t *testing.T) {
+func TestControllerRulesE2E(t *testing.T) {
 	// Setup the test environment
 	config, err := common.GetConfig()
 	if err != nil {
@@ -111,7 +110,7 @@ func TestControllerE2E(t *testing.T) {
 		}
 	}()
 	t.Log("going to sleep")
-	time.Sleep(time.Second * 10)
+	time.Sleep(time.Second * 5)
 	folderUid, err := ctrl.logzioGrafanaAlertsClient.FindOrCreatePrometheusAlertsFolder()
 	if err != nil {
 		t.Fatalf("Failed to get logzio alerts folder uid: %v", err)

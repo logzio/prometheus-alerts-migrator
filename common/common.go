@@ -28,20 +28,45 @@ const (
 	TypePagerDuty = "pagerduty" // # of letter indices fitting in 63 bits
 )
 
+var (
+	helpFlag, ignoreSlackTextFlag, ignoreSlackTitleFlag                                                                     *bool
+	logzioAPITokenFlag, rulesConfigmapAnnotation, alertManagerConfigmapAnnotation, logzioAPIURLFlag, rulesDSFlag, envIDFlag *string
+	workerCountFlag                                                                                                         *int
+)
+
 // NewConfig creates a Config struct, populating it with values from command-line flags and environment variables.
 func NewConfig() *Config {
 	// Define flags
-	helpFlag := flag.Bool("help", false, "Display help")
-	rulesConfigmapAnnotation := flag.String("rules-annotation", "prometheus.io/kube-rules", "Annotation that states that this configmap contains prometheus rules")
-	alertManagerConfigmapAnnotation := flag.String("alertmanager-annotation", "prometheus.io/kube-alertmanager", "Annotation that states that this configmap contains alertmanager configuration")
-	logzioAPITokenFlag := flag.String("logzio-api-token", "", "LOGZIO API token")
-	logzioAPIURLFlag := flag.String("logzio-api-url", "https://api.logz.io", "LOGZIO API URL")
-	rulesDSFlag := flag.String("rules-ds", "", "name of the data source for the alert rules")
-	envIDFlag := flag.String("env-id", "my-env", "environment identifier, usually cluster name")
-	workerCountFlag := flag.Int("workers", 2, "The number of workers to process the alerts")
-	ignoreSlackTextFlag := flag.Bool("ignore-slack-text", false, "Ignore slack contact points text field")
-	ignoreSlackTitleFlag := flag.Bool("ignore-slack-title", false, "Ignore slack contact points title field")
-
+	if flag.Lookup("help") == nil {
+		helpFlag = flag.Bool("help", false, "Display help")
+	}
+	if flag.Lookup("rules-annotation") == nil {
+		rulesConfigmapAnnotation = flag.String("rules-annotation", "prometheus.io/kube-rules", "Annotation that states that this configmap contains prometheus rules")
+	}
+	if flag.Lookup("alertmanager-annotation") == nil {
+		alertManagerConfigmapAnnotation = flag.String("alertmanager-annotation", "prometheus.io/kube-alertmanager", "Annotation that states that this configmap contains alertmanager configuration")
+	}
+	if flag.Lookup("logzio-api-token") == nil {
+		logzioAPITokenFlag = flag.String("logzio-api-token", "", "LOGZIO API token")
+	}
+	if flag.Lookup("logzio-api-url") == nil {
+		logzioAPIURLFlag = flag.String("logzio-api-url", "https://api.logz.io", "LOGZIO API URL")
+	}
+	if flag.Lookup("rules-ds") == nil {
+		rulesDSFlag = flag.String("rules-ds", "", "name of the data source for the alert rules")
+	}
+	if flag.Lookup("env-id") == nil {
+		envIDFlag = flag.String("env-id", "my-env", "environment identifier, usually cluster name")
+	}
+	if flag.Lookup("workers") == nil {
+		workerCountFlag = flag.Int("workers", 2, "The number of workers to process the alerts")
+	}
+	if flag.Lookup("ignore-slack-text") == nil {
+		ignoreSlackTextFlag = flag.Bool("ignore-slack-text", false, "Ignore slack contact points text field")
+	}
+	if flag.Lookup("ignore-slack-title") == nil {
+		ignoreSlackTitleFlag = flag.Bool("ignore-slack-title", false, "Ignore slack contact points title field")
+	}
 	// Parse the flags
 	flag.Parse()
 

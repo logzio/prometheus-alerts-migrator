@@ -363,6 +363,11 @@ func (l *LogzioGrafanaAlertsClient) WriteRules(rulesToWrite []rulefmt.RuleNode, 
 
 // generateGrafanaAlert generates a GrafanaAlertRule from a Prometheus rule
 func (l *LogzioGrafanaAlertsClient) generateGrafanaAlert(rule rulefmt.RuleNode, folderUid string) (grafana_alerts.GrafanaAlertRule, error) {
+	// validate the rule
+	validationErrs := rule.Validate()
+	if len(validationErrs) > 0 {
+		return grafana_alerts.GrafanaAlertRule{}, fmt.Errorf("invalid rule: %v", validationErrs)
+	}
 	// Create promql query to return time series data for the expression.
 	promqlQuery := PrometheusQueryModel{
 		Expr:  rule.Expr.Value,
