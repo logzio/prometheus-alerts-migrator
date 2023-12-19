@@ -1,0 +1,305 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alert-manager
+  namespace: alert-migrator-test
+  labels:
+    app: prometheus
+  annotations:
+    prometheus.io/kube-alertmanager: "true"
+data:
+  alert_manager: |
+    global:
+      resolve_timeout: 5m
+      http_config:
+        follow_redirects: true
+        enable_http2: true
+      smtp_from: alertmanager@logzio.com
+      smtp_hello: localhost
+      smtp_require_tls: false
+      slack_api_url: https://api.slack.com/
+      pagerduty_url: https://events.pagerduty.com/v2/enqueue
+      opsgenie_api_url: https://api.opsgenie.com/
+      wechat_api_url: https://qyapi.weixin.qq.com/cgi-bin/
+      victorops_api_url: https://alert.victorops.com/integrations/generic/20131114/alert/
+      telegram_api_url: https://api.telegram.org
+      webex_api_url: https://webexapis.com/v1/messages
+    route:
+      receiver: lost-alerts-slack
+      group_by:
+        - alertname
+        - hostname
+        - service
+      continue: false
+      routes:  []
+    receivers:
+      - name: lost-alerts-slack
+        slack_configs:
+          - send_resolved: true
+            http_config:
+              follow_redirects: true
+              enable_http2: true
+            api_url: https://api.slack.com/
+            channel: '#eng-sre-lost-alerts'
+            username: AlertManagerd (tooling-test)
+            color: '{{ if eq .Status "firing" }}danger{{ else }}good{{ end }}'
+            title: '{{ template "default.title" . }}'
+            title_link: '{{ template "slack.default.titlelink" . }}'
+            pretext: '{{ template "slack.default.pretext" . }}'
+            text: '{{ template "default.text" . }}'
+            short_fields: false
+            footer: '{{ template "slack.default.footer" . }}'
+            fallback: '{{ template "slack.default.fallback" . }}'
+            callback_id: '{{ template "slack.default.callbackid" . }}'
+            icon_emoji: '{{ template "slack.default.iconemoji" . }}'
+            icon_url: '{{ template "slack.default.iconurl" . }}'
+            link_names: false
+          
+          - send_resolved: true
+            http_config:
+              follow_redirects: true
+              enable_http2: true
+            api_url: https://api.slack.com/
+            channel: '#eng-sre-lost-alertsto'
+            username: AlertManagers (tooling-test)
+            color: '{{ if eq .Status "firing" }}danger{{ else }}good{{ end }}'
+            title: '{{ template "default.title" . }}'
+            title_link: '{{ template "slack.default.titlelink" . }}'
+            pretext: '{{ template "slack.default.pretext" . }}'
+            text: '{{ template "default.text" . }}'
+            short_fields: false
+            footer: '{{ template "slack.default.footer" . }}'
+            fallback: '{{ template "slack.default.fallback" . }}'
+            callback_id: '{{ template "slack.default.callbackid" . }}'
+            icon_emoji: '{{ template "slack.default.iconemoji" . }}'
+            icon_url: '{{ template "slack.default.iconurl" . }}'
+            link_names: false
+
+      - name: ada-disaster-channels
+        slack_configs:
+          - send_resolved: true
+            http_config:
+              follow_redirects: true
+              enable_http2: true
+            api_url: https://api.slack.com/
+            channel: '#eng-ada-alerts'
+            username: AlertManager (tooling-test)
+            color: '{{ if eq .Status "firing" }}danger{{ else }}good{{ end }}'
+            title: '{{ template "default.title" . }}'
+            title_link: '{{ template "slack.default.titlelink" . }}'
+            pretext: '{{ template "slack.default.pretext" . }}'
+            text: '{{ template "default.text" . }}'
+            short_fields: false
+            footer: '{{ template "slack.default.footer" . }}'
+            fallback: '{{ template "slack.default.fallback" . }}'
+            callback_id: '{{ template "slack.default.callbackid" . }}'
+            icon_emoji: '{{ template "slack.default.iconemoji" . }}'
+            icon_url: '{{ template "slack.default.iconurl" . }}'
+            link_names: false
+      - name: ada-major-channels
+        slack_configs:
+          - send_resolved: true
+            http_config:
+              follow_redirects: true
+              enable_http2: true
+            api_url: https://api.slack.com/
+            channel: '#eng-ada-alerts'
+            username: AlertManager (tooling-test)
+            color: '{{ if eq .Status "firing" }}danger{{ else }}good{{ end }}'
+            title: '{{ template "default.title" . }}'
+            title_link: '{{ template "slack.default.titlelink" . }}'
+            pretext: '{{ template "slack.default.pretext" . }}'
+            text: '{{ template "default.text" . }}'
+            short_fields: false
+            footer: '{{ template "slack.default.footer" . }}'
+            fallback: '{{ template "slack.default.fallback" . }}'
+            callback_id: '{{ template "slack.default.callbackid" . }}'
+            icon_emoji: '{{ template "slack.default.iconemoji" . }}'
+            icon_url: '{{ template "slack.default.iconurl" . }}'
+            link_names: false
+      - name: ada-testlab-channels
+        slack_configs:
+          - send_resolved: true
+            http_config:
+              follow_redirects: true
+              enable_http2: true
+            api_url: https://api.slack.com/
+            channel: '#eng-ada-lab-alerts'
+            username: AlertManager (tooling-test)
+            color: '{{ if eq .Status "firing" }}danger{{ else }}good{{ end }}'
+            title: '{{ template "default.title" . }}'
+            title_link: '{{ template "slack.default.titlelink" . }}'
+            pretext: '{{ template "slack.default.pretext" . }}'
+            text: '{{ template "default.text" . }}'
+            short_fields: false
+            footer: '{{ template "slack.default.footer" . }}'
+            fallback: '{{ template "slack.default.fallback" . }}'
+            callback_id: '{{ template "slack.default.callbackid" . }}'
+            icon_emoji: '{{ template "slack.default.iconemoji" . }}'
+            icon_url: '{{ template "slack.default.iconurl" . }}'
+            link_names: false
+      - name: athlone-disaster-channels
+        slack_configs:
+          - send_resolved: true
+            http_config:
+              follow_redirects: true
+              enable_http2: true
+            api_url: https://api.slack.com/
+            channel: '#eng-athlone-alerts'
+            username: AlertManager (tooling-test)
+            color: '{{ if eq .Status "firing" }}danger{{ else }}good{{ end }}'
+            title: '{{ template "default.title" . }}'
+            title_link: '{{ template "slack.default.titlelink" . }}'
+            pretext: '{{ template "slack.default.pretext" . }}'
+            text: '{{ template "default.text" . }}'
+            short_fields: false
+            footer: '{{ template "slack.default.footer" . }}'
+            fallback: '{{ template "slack.default.fallback" . }}'
+            callback_id: '{{ template "slack.default.callbackid" . }}'
+            icon_emoji: '{{ template "slack.default.iconemoji" . }}'
+            icon_url: '{{ template "slack.default.iconurl" . }}'
+            link_names: false
+      - name: ops-disaster-channels
+        pagerduty_configs:
+          - send_resolved: true
+            http_config:
+              follow_redirects: true
+              enable_http2: true
+            service_key: <secretf>
+            url: https://events.pagerduty.com/v2/enqueue
+            client: '{{ template "pagerduty.default.client" . }}'
+            client_url: '{{ template "pagerduty.default.clientURL" . }}'
+            description: '{{ template "pagerduty.default.description" .}}'
+            details:
+              firing: '{{ template "pagerduty.default.instances" .Alerts.Firing }}'
+              num_firing: '{{ .Alerts.Firing | len }}'
+              num_resolved: '{{ .Alerts.Resolved | len }}'
+              resolved: '{{ template "pagerduty.default.instances" .Alerts.Resolved }}'
+            source: '{{ template "pagerduty.default.client" . }}'
+        slack_configs:
+          - send_resolved: true
+            http_config:
+              follow_redirects: true
+              enable_http2: true
+            api_url: https://api.slack.com/
+            channel: '#eng-sysops-alerts'
+            username: AlertManager (tooling-test)
+            color: '{{ if eq .Status "firing" }}danger{{ else }}good{{ end }}'
+            title: '{{ template "default.title" . }}'
+            title_link: '{{ template "slack.default.titlelink" . }}'
+            pretext: '{{ template "slack.default.pretext" . }}'
+            text: '{{ template "default.text" . }}'
+            short_fields: false
+            footer: '{{ template "slack.default.footer" . }}'
+            fallback: '{{ template "slack.default.fallback" . }}'
+            callback_id: '{{ template "slack.default.callbackid" . }}'
+            icon_emoji: '{{ template "slack.default.iconemoji" . }}'
+            icon_url: '{{ template "slack.default.iconurl" . }}'
+            link_names: false
+      - name: ops-major-channels
+        slack_configs:
+          - send_resolved: true
+            http_config:
+              follow_redirects: true
+              enable_http2: true
+            api_url: https://api.slack.com/
+            channel: '#eng-sysops-alerts'
+            username: AlertManager (tooling-test)
+            color: '{{ if eq .Status "firing" }}danger{{ else }}good{{ end }}'
+            title: '{{ template "default.title" . }}'
+            title_link: '{{ template "slack.default.titlelink" . }}'
+            pretext: '{{ template "slack.default.pretext" . }}'
+            text: '{{ template "default.text" . }}'
+            short_fields: false
+            footer: '{{ template "slack.default.footer" . }}'
+            fallback: '{{ template "slack.default.fallback" . }}'
+            callback_id: '{{ template "slack.default.callbackid" . }}'
+            icon_emoji: '{{ template "slack.default.iconemoji" . }}'
+            icon_url: '{{ template "slack.default.iconurl" . }}'
+            link_names: false
+      - name: ops-quarantine-channels
+        slack_configs:
+          - send_resolved: true
+            http_config:
+              follow_redirects: true
+              enable_http2: true
+            api_url: https://api.slack.com/
+            channel: '#eng-ops-alerts-spam'
+            username: AlertManager (tooling-test)
+            color: '{{ if eq .Status "firing" }}danger{{ else }}good{{ end }}'
+            title: '{{ template "default.title" . }}'
+            title_link: '{{ template "slack.default.titlelink" . }}'
+            pretext: '{{ template "slack.default.pretext" . }}'
+            text: '{{ template "default.text" . }}'
+            short_fields: false
+            footer: '{{ template "slack.default.footer" . }}'
+            fallback: '{{ template "slack.default.fallback" . }}'
+            callback_id: '{{ template "slack.default.callbackid" . }}'
+            icon_emoji: '{{ template "slack.default.iconemoji" . }}'
+            icon_url: '{{ template "slack.default.iconurl" . }}'
+            link_names: false
+      - name: ops-testlab-channelss
+        slack_configs:
+          - send_resolved: true
+            http_config:
+              follow_redirects: true
+              enable_http2: true
+            api_url: https://api.slack.com/
+            channel: '#eng-sysops-alerts'
+            username: AlertManager (tooling-test222)
+            color: '{{ if eq .Status "firing" }}danger{{ else }}good{{ end }}'
+            title: '{{ template "default.title" . }}'
+            title_link: '{{ template "slack.default.titlelink" . }}'
+            pretext: '{{ template "slack.default.pretext" . }}'
+            text: '{{ template "default.text" . }}'
+            short_fields: false
+            footer: '{{ template "slack.default.footer" . }}'
+            fallback: '{{ template "slack.default.fallback" . }}'
+            callback_id: '{{ template "slack.default.callbackid" . }}'
+            icon_emoji: '{{ template "slack.default.iconemoji" . }}'
+            icon_url: '{{ template "slack.default.iconurl" . }}'
+            link_names: false
+      - name: kube-system-alerts
+        slack_configs:
+          - send_resolved: true
+            http_config:
+              follow_redirects: true
+              enable_http2: true
+            api_url: https://api.slack.com/
+            channel: '#eng-sysops-alerts'
+            username: AlertManager (tooling-test)
+            color: '{{ if eq .Status "firing" }}danger{{ else }}good{{ end }}'
+            title: '{{ template "default.title" . }}'
+            title_link: '{{ template "slack.default.titlelink" . }}'
+            pretext: '{{ template "slack.default.pretext" . }}'
+            text: '{{ template "default.text" . }}'
+            short_fields: false
+            footer: '{{ template "slack.default.footer" . }}'
+            fallback: '{{ template "slack.default.fallback" . }}'
+            callback_id: '{{ template "slack.default.callbackid" . }}'
+            icon_emoji: '{{ template "slack.default.iconemoji" . }}'
+            icon_url: '{{ template "slack.default.iconurl" . }}'
+            link_names: false
+      - name: optimus-disaster-channels
+        slack_configs:
+          - send_resolved: true
+            http_config:
+              follow_redirects: true
+              enable_http2: true
+            api_url: https://api.slack.com/
+            channel: '#eng-optimus-alerts'
+            username: AlertManager (tooling-test)
+            color: '{{ if eq .Status "firing" }}danger{{ else }}good{{ end }}'
+            title: '{{ template "default.title" . }}'
+            title_link: '{{ template "slack.default.titlelink" . }}'
+            pretext: '{{ template "slack.default.pretext" . }}'
+            text: '{{ template "default.text" . }}'
+            short_fields: false
+            footer: '{{ template "slack.default.footer" . }}'
+            fallback: '{{ template "slack.default.fallback" . }}'
+            callback_id: '{{ template "slack.default.callbackid" . }}'
+            icon_emoji: '{{ template "slack.default.iconemoji" . }}'
+            icon_url: '{{ template "slack.default.iconurl" . }}'
+            link_names: false
+    templates: []
+
