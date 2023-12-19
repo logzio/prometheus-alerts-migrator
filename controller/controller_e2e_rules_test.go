@@ -94,7 +94,6 @@ func TestControllerRulesE2E(t *testing.T) {
 	defer cleanupLogzioAlerts(*ctrl)
 	defer cleanupTestCluster(clientset, testNamespace, "opentelemetry-rules", "infrastructure-rules")
 
-	//kubeInformerFactory.Start(stopCh)
 	err = deployConfigMaps(clientset, "../testdata/cm.yml", "../testdata/cm2.yml")
 	if err != nil {
 		t.Fatalf("Failed to deploy ConfigMaps: %v", err)

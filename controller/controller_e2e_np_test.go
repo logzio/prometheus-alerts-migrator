@@ -2,27 +2,23 @@ package controller
 
 import (
 	"github.com/logzio/prometheus-alerts-migrator/common"
-	"github.com/logzio/prometheus-alerts-migrator/pkg/signals"
 	"github.com/stretchr/testify/assert"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
-	"log"
+	"k8s.io/klog/v2"
 	"testing"
 	"time"
 )
 
-var stopCh = signals.SetupSignalHandler()
-
-func cleanupLogzioContactPoints(ctl Controller) {
-	contactPoints, err := ctl.logzioGrafanaAlertsClient.GetLogzioManagedGrafanaContactPoints()
+func cleanupLogzioNotificationPolicies(ctl Controller) {
+	err := ctl.logzioGrafanaAlertsClient.ResetNotificationPolicyTree()
 	if err != nil {
-		log.Fatalf("Failed to get logzio contact points: %v", err)
+		klog.Error(err)
 	}
-	ctl.logzioGrafanaAlertsClient.DeleteContactPoints(contactPoints)
 }
 
 // TestControllerE2E is the main function that runs the end-to-end test
-func TestControllerContactPointsE2E(t *testing.T) {
+func TestControllerNotificationPoliciesE2E(t *testing.T) {
 	// Setup the test environment
 	config, err := common.GetConfig()
 	if err != nil {
@@ -35,16 +31,16 @@ func TestControllerContactPointsE2E(t *testing.T) {
 	}
 	ctlConfig := common.NewConfig()
 	kubeInformerFactory := informers.NewSharedInformerFactory(clientset, time.Second*30)
-	// set up signals so we handle the first shutdown signal gracefully
 	// Instantiate the controller
 	ctrl := NewController(clientset, kubeInformerFactory.Core().V1().ConfigMaps(), *ctlConfig)
-
-	kubeInformerFactory.Start(stopCh)
-
+	// cleanup before starting the test to start in a clean env
+	cleanupLogzioNotificationPolicies(*ctrl)
+	cleanupLogzioContactPoints(*ctrl)
 	// test contact points
+	defer cleanupLogzioNotificationPolicies(*ctrl)
 	defer cleanupLogzioContactPoints(*ctrl)
-	defer cleanupTestCluster(clientset, testNamespace, "alert-manager")
-	err = deployConfigMaps(clientset, "../testdata/alert_manager_contact_points.yaml")
+	defer cleanupTestCluster(clientset, testNamespace, "alert-manager-np")
+	err = deployConfigMaps(clientset, "../testdata/alert_manager_notification_policies.yaml")
 	if err != nil {
 		t.Fatalf("Failed to deploy ConfigMaps: %v", err)
 	}
@@ -65,6 +61,12 @@ func TestControllerContactPointsE2E(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to get logzio contact points: %v", err)
 	}
-	assert.Equal(t, 12, len(logzioContactPoints))
-
+	assert.Equal(t, 8, len(logzioContactPoints))
+	logzioNotificationPolicyTree, err := ctrl.logzioGrafanaAlertsClient.GetLogzioGrafanaNotificationPolicies()
+	assert.Equal(t, "my-env-alert-migrator-test-alert-manager-np-default-email", logzioNotificationPolicyTree.Receiver)
+	t.Log("logzio routes:")
+	for i, route := range logzioNotificationPolicyTree.Routes {
+		t.Logf("route %d: %v", i, route.Receiver)
+	}
+	assert.Equal(t, 7, len(logzioNotificationPolicyTree.Routes))
 }
