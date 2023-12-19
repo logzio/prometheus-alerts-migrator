@@ -18,12 +18,13 @@ import (
 )
 
 const (
-	refIdA             = "A"
-	refIdB             = "B"
-	expressionString   = "__expr__"
-	queryType          = "query"
-	alertFolder        = "prometheus-alerts"
-	randomStringLength = 5
+	refIdA                 = "A"
+	refIdB                 = "B"
+	expressionString       = "__expr__"
+	queryType              = "query"
+	alertFolder            = "prometheus-alerts"
+	randomStringLength     = 5
+	grafanaDefaultReceiver = "default-email"
 )
 
 // ReduceQueryModel represents a reduce query for time series data
@@ -123,8 +124,20 @@ func NewLogzioGrafanaAlertsClient(logzioApiToken string, logzioApiUrl string, ru
 	}
 }
 
-// SetNotificationPolicyTree converts route tree to grafana notification policy tree and writes it to logz.io
-func (l *LogzioGrafanaAlertsClient) SetNotificationPolicyTree(routeTree *alert_manager_config.Route) {
+func (l *LogzioGrafanaAlertsClient) ResetNotificationPolicyTree() error {
+	defaultGrafanaNotificationPolicy := grafana_notification_policies.GrafanaNotificationPolicyTree{
+		Receiver: grafanaDefaultReceiver,
+		Routes:   []grafana_notification_policies.GrafanaNotificationPolicy{},
+	}
+	err := l.logzioNotificationPolicyClient.SetupGrafanaNotificationPolicyTree(defaultGrafanaNotificationPolicy)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// SetNotificationPolicyTreeFromRouteTree converts route tree to grafana notification policy tree and writes it to logz.io
+func (l *LogzioGrafanaAlertsClient) SetNotificationPolicyTreeFromRouteTree(routeTree *alert_manager_config.Route) {
 	// getting logzio contact points to ensure it exists for the notification policy tree
 	logzioContactPoints, err := l.GetLogzioManagedGrafanaContactPoints()
 	if err != nil {

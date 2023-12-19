@@ -283,7 +283,7 @@ func (c *Controller) processAlertManagerConfigMaps(configmap *corev1.ConfigMap) 
 	c.processContactPoints(receiversMap, logzioContactPoints)
 
 	// Handle the notification policies after contact points are processed, to prevent missing contact points at logzio
-	c.logzioGrafanaAlertsClient.SetNotificationPolicyTree(routeTree)
+	c.logzioGrafanaAlertsClient.SetNotificationPolicyTreeFromRouteTree(routeTree)
 
 	return nil
 }
