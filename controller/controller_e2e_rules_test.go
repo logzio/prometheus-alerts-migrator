@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"github.com/logzio/prometheus-alerts-migrator/common"
-	"github.com/logzio/prometheus-alerts-migrator/pkg/signals"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -88,8 +87,6 @@ func TestControllerRulesE2E(t *testing.T) {
 	}
 	ctlConfig := common.NewConfig()
 	kubeInformerFactory := informers.NewSharedInformerFactory(clientset, time.Second*30)
-	// set up signals so we handle the first shutdown signal gracefully
-	stopCh := signals.SetupSignalHandler()
 	// Instantiate the controller
 	ctrl := NewController(clientset, kubeInformerFactory.Core().V1().ConfigMaps(), *ctlConfig)
 
@@ -97,7 +94,7 @@ func TestControllerRulesE2E(t *testing.T) {
 	defer cleanupLogzioAlerts(*ctrl)
 	defer cleanupTestCluster(clientset, testNamespace, "opentelemetry-rules", "infrastructure-rules")
 
-	kubeInformerFactory.Start(stopCh)
+	//kubeInformerFactory.Start(stopCh)
 	err = deployConfigMaps(clientset, "../testdata/cm.yml", "../testdata/cm2.yml")
 	if err != nil {
 		t.Fatalf("Failed to deploy ConfigMaps: %v", err)
@@ -110,7 +107,7 @@ func TestControllerRulesE2E(t *testing.T) {
 		}
 	}()
 	t.Log("going to sleep")
-	time.Sleep(time.Second * 5)
+	time.Sleep(time.Second * 10)
 	folderUid, err := ctrl.logzioGrafanaAlertsClient.FindOrCreatePrometheusAlertsFolder()
 	if err != nil {
 		t.Fatalf("Failed to get logzio alerts folder uid: %v", err)
@@ -118,6 +115,10 @@ func TestControllerRulesE2E(t *testing.T) {
 	logzioAlerts, err := ctrl.logzioGrafanaAlertsClient.GetLogzioGrafanaAlerts(folderUid)
 	if err != nil {
 		t.Fatalf("Failed to get logzio alerts: %v", err)
+	}
+	t.Log("logzio alert rules:")
+	for i, alert := range logzioAlerts {
+		t.Logf("%d: %v", i, alert.Title)
 	}
 	assert.Equal(t, 14, len(logzioAlerts))
 
