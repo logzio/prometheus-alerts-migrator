@@ -15,6 +15,7 @@ func cleanupLogzioNotificationPolicies(ctl Controller) {
 	if err != nil {
 		klog.Error(err)
 	}
+	cleanupLogzioContactPoints(ctl)
 }
 
 // TestControllerE2E is the main function that runs the end-to-end test
@@ -38,7 +39,6 @@ func TestControllerNotificationPoliciesE2E(t *testing.T) {
 	cleanupLogzioContactPoints(*ctrl)
 	// test contact points
 	defer cleanupLogzioNotificationPolicies(*ctrl)
-	defer cleanupLogzioContactPoints(*ctrl)
 	defer cleanupTestCluster(clientset, testNamespace, "alert-manager-np")
 	err = deployConfigMaps(clientset, "../testdata/alert_manager_notification_policies.yaml")
 	if err != nil {
