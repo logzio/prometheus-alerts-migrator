@@ -273,7 +273,10 @@ func (c *Controller) processAlertManagerConfigMaps(configmap *corev1.ConfigMap) 
 	}
 
 	// get receivers and routes from alert manager configmap
-	receivers, routeTree := c.getClusterReceiversAndRoutes(configmap)
+	receivers, routeTree, err := c.getClusterReceiversAndRoutes(configmap)
+	if err != nil {
+		return err
+	}
 	// Creating maps for efficient lookups
 	receiversMap := make(map[string]alert_manager_config.Receiver)
 	for _, receiver := range receivers {
@@ -288,7 +291,7 @@ func (c *Controller) processAlertManagerConfigMaps(configmap *corev1.ConfigMap) 
 	return nil
 }
 
-func (c *Controller) getClusterReceiversAndRoutes(configmap *corev1.ConfigMap) ([]alert_manager_config.Receiver, *alert_manager_config.Route) {
+func (c *Controller) getClusterReceiversAndRoutes(configmap *corev1.ConfigMap) ([]alert_manager_config.Receiver, *alert_manager_config.Route, error) {
 	var receivers []alert_manager_config.Receiver
 	var routeTree alert_manager_config.Route
 	if c.isAlertManagerConfigMap(configmap) {
@@ -296,7 +299,7 @@ func (c *Controller) getClusterReceiversAndRoutes(configmap *corev1.ConfigMap) (
 			alertManagerConfig, err := alert_manager_config.Load(value)
 			if err != nil {
 				utilruntime.HandleError(fmt.Errorf("unable to load alert manager config; %s", err))
-				return nil, &alert_manager_config.Route{}
+				return nil, &alert_manager_config.Route{}, err
 			}
 			// Add prefix to distinguish between alert manager imported from alert manager and logz.io custom contact points
 			stub := common.CreateNameStub(configmap)
@@ -316,7 +319,7 @@ func (c *Controller) getClusterReceiversAndRoutes(configmap *corev1.ConfigMap) (
 		}
 	}
 	klog.Infof("Found %d receivers and %d routes, in %s", len(receivers), len(routeTree.Routes), configmap.Name)
-	return receivers, &routeTree
+	return receivers, &routeTree, nil
 }
 
 func (c *Controller) processContactPoints(receiversMap map[string]alert_manager_config.Receiver, logzioContactPoints []grafana_contact_points.GrafanaContactPoint) {
