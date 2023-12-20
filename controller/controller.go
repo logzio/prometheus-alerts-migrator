@@ -283,10 +283,29 @@ func (c *Controller) processAlertManagerConfigMaps(configmap *corev1.ConfigMap) 
 		receiversMap[receiver.Name] = receiver
 	}
 
-	c.processContactPoints(receiversMap, logzioContactPoints)
+	/*
+		Processing logic:
+		1. compare contact points with logz.io managed contact points
+		2. if contact point is not found at logz.io, add it
+		3. if contact point is found at logz.io, update it
+		4. handle setting new notification policy tree after contact points are processed, to prevent missing contact points at logzio
+		5. delete contact points from logz.io that are not found in the alert manager configmap
+		Note: `name` field is the identifier for contact points, when a user changes the name of a contact point, it will delete the old one and create a new one, so we handle deletion after setting the new notification policy tree to avoid deleting contact points that are in use
+	*/
 
+	contactPointsToAdd, contactPointsToUpdate, contactPointsToDelete := c.compareContactPoints(receiversMap, logzioContactPoints)
+	if len(contactPointsToUpdate) > 0 {
+		c.logzioGrafanaAlertsClient.UpdateContactPoints(contactPointsToUpdate, logzioContactPoints)
+	}
+	if len(contactPointsToAdd) > 0 {
+		c.logzioGrafanaAlertsClient.WriteContactPoints(contactPointsToAdd)
+	}
 	// Handle the notification policies after contact points are processed, to prevent missing contact points at logzio
 	c.logzioGrafanaAlertsClient.SetNotificationPolicyTreeFromRouteTree(routeTree)
+
+	if len(contactPointsToDelete) > 0 {
+		c.logzioGrafanaAlertsClient.DeleteContactPoints(contactPointsToDelete)
+	}
 
 	return nil
 }
@@ -320,19 +339,6 @@ func (c *Controller) getClusterReceiversAndRoutes(configmap *corev1.ConfigMap) (
 	}
 	klog.Infof("Found %d receivers and %d routes, in %s", len(receivers), len(routeTree.Routes), configmap.Name)
 	return receivers, &routeTree, nil
-}
-
-func (c *Controller) processContactPoints(receiversMap map[string]alert_manager_config.Receiver, logzioContactPoints []grafana_contact_points.GrafanaContactPoint) {
-	contactPointsToAdd, contactPointsToUpdate, contactPointsToDelete := c.compareContactPoints(receiversMap, logzioContactPoints)
-	if len(contactPointsToUpdate) > 0 {
-		c.logzioGrafanaAlertsClient.UpdateContactPoints(contactPointsToUpdate, logzioContactPoints)
-	}
-	if len(contactPointsToAdd) > 0 {
-		c.logzioGrafanaAlertsClient.WriteContactPoints(contactPointsToAdd)
-	}
-	if len(contactPointsToDelete) > 0 {
-		c.logzioGrafanaAlertsClient.DeleteContactPoints(contactPointsToDelete)
-	}
 }
 
 // compareContactPoints
