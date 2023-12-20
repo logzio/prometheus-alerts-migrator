@@ -315,12 +315,12 @@ func (c *Controller) getClusterReceiversAndRoutes(configmap *corev1.ConfigMap) (
 			c.logzioGrafanaAlertsClient.AlertManagerGlobalConfig = alertManagerConfig.Global
 		}
 	}
+	klog.Infof("Found %d receivers and %d routes, in %s", len(receivers), len(routeTree.Routes), configmap.Name)
 	return receivers, &routeTree
 }
 
 func (c *Controller) processContactPoints(receiversMap map[string]alert_manager_config.Receiver, logzioContactPoints []grafana_contact_points.GrafanaContactPoint) {
 	contactPointsToAdd, contactPointsToUpdate, contactPointsToDelete := c.compareContactPoints(receiversMap, logzioContactPoints)
-	klog.Infof("Contact points summary: to add: %d, to update: %d, to delete: %d", len(contactPointsToAdd), len(contactPointsToUpdate), len(contactPointsToDelete))
 	if len(contactPointsToUpdate) > 0 {
 		c.logzioGrafanaAlertsClient.UpdateContactPoints(contactPointsToUpdate, logzioContactPoints)
 	}
