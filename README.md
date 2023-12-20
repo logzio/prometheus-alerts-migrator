@@ -115,11 +115,11 @@ data:
           - to: 'alerts@example.com'
       - name: 'slack-production'
         slack_configs:
-          - api_url: 'https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX'
+          - api_url: 'https://hooks.slack.com/services/T00000000/B00000000/'
             channel: '#prod-alerts'
       - name: 'slack-staging'
         slack_configs:
-          - api_url: 'https://hooks.slack.com/services/T00000000/B11111111/YYYYYYYYYYYYYYYYYYYYYYYY'
+          - api_url: 'https://hooks.slack.com/services/T00000000/B11111111/'
             channel: '#staging-alerts'
 
 ```
