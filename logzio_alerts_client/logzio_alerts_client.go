@@ -217,6 +217,10 @@ func (l *LogzioGrafanaAlertsClient) generateGrafanaNotificationPolicy(route *ale
 			grafanaObjMatchers = append(grafanaObjMatchers, grafana_notification_policies.MatcherObj{key, operator, value})
 		}
 	}
+	// handling `match` operators although it's deprecated to support users with old prometheus versions
+	for key, value := range route.Match {
+		grafanaObjMatchers = append(grafanaObjMatchers, grafana_notification_policies.MatcherObj{key, "=", value})
+	}
 	notificationPolicy.ObjectMatchers = grafanaObjMatchers
 	// repeat the process for nested policies
 	for _, childRoute := range route.Routes {
