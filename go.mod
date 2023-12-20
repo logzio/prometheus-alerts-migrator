@@ -3,7 +3,8 @@ module github.com/logzio/prometheus-alerts-migrator
 go 1.19
 
 require (
-	github.com/logzio/logzio_terraform_client v1.19.0
+	github.com/logzio/logzio_terraform_client v1.20.0
+	github.com/prometheus/alertmanager v0.26.0
 	github.com/prometheus/common v0.44.0
 	github.com/prometheus/prometheus v0.47.2
 	github.com/stretchr/testify v1.8.4
@@ -11,7 +12,7 @@ require (
 	k8s.io/api v0.28.3
 	k8s.io/apimachinery v0.28.3
 	k8s.io/client-go v0.28.3
-	k8s.io/klog v1.0.0
+	k8s.io/klog/v2 v2.110.1
 )
 
 require (
@@ -21,7 +22,7 @@ require (
 	github.com/AzureAD/microsoft-authentication-library-for-go v1.0.0 // indirect
 	github.com/alecthomas/units v0.0.0-20211218093645-b94a6e3cc137 // indirect
 	github.com/avast/retry-go v3.0.0+incompatible // indirect
-	github.com/aws/aws-sdk-go v1.44.302 // indirect
+	github.com/aws/aws-sdk-go v1.44.317 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
@@ -30,7 +31,7 @@ require (
 	github.com/emicklei/go-restful/v3 v3.10.2 // indirect
 	github.com/go-kit/log v0.2.1 // indirect
 	github.com/go-logfmt/logfmt v0.6.0 // indirect
-	github.com/go-logr/logr v1.2.4 // indirect
+	github.com/go-logr/logr v1.3.0 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-openapi/jsonpointer v0.20.0 // indirect
 	github.com/go-openapi/jsonreference v0.20.2 // indirect
@@ -85,7 +86,6 @@ require (
 	google.golang.org/protobuf v1.31.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
-	k8s.io/klog/v2 v2.100.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20230717233707-2695361300d9 // indirect
 	k8s.io/utils v0.0.0-20230711102312-30195339c3c7 // indirect
 	sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd // indirect

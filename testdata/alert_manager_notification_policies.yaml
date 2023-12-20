@@ -1,0 +1,137 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alert-manager-np
+  namespace: alert-migrator-test
+  annotations:
+    prometheus.io/kube-alertmanager: "true"
+data:
+  all_instances_down_otel_collector: |
+    global:
+      smtp_smarthost: 'smtp.example.com:587'
+      smtp_from: 'alertmanager@example.com'
+      smtp_auth_username: 'alertmanager'
+      smtp_auth_password: 'password'
+    route:
+      receiver: 'default-email'
+      group_by: ['alertname', 'env']
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 1h
+      routes:
+        - matchers:
+            - quarantine="true"
+            - team="ops"
+          group_by:
+            - alertname
+            - hostname
+            - instance
+            - device
+            - node
+          receiver: 'slack-quarantine-ops'
+          continue: true
+
+        - matchers:
+            - severity="critical"
+            - team="dev"
+          group_by:
+            - alertname
+            - hostname
+            - instance
+            - device
+            - node
+          receiver: 'pagerduty-critical-dev'
+          continue: true
+
+        - matchers:
+            - environment="staging"
+          group_by:
+            - alertname
+            - hostname
+            - instance
+            - device
+            - node
+          receiver: 'email-staging'
+          continue: true
+
+        - matchers:
+            - environment="production"
+            - severity="warning"
+          group_by:
+            - alertname
+            - hostname
+            - instance
+            - device
+            - node
+          receiver: 'slack-prod-warning'
+          continue: true
+
+        - matchers:
+            - team="network"
+          group_by:
+            - alertname
+            - hostname
+            - instance
+            - device
+            - node
+          receiver: 'slack-network-team'
+          continue: true
+
+        - matchers:
+            - environment="qa"
+          group_by:
+            - alertname
+            - hostname
+            - instance
+            - device
+            - node
+          receiver: 'slack-qa-alerts'
+          continue: true
+
+        - matchers:
+            - service="database"
+          group_by:
+            - alertname
+            - hostname
+            - instance
+            - device
+            - node
+          receiver: 'email-database-service'
+          continue: true
+
+    receivers:
+      - name: 'default-email'
+        email_configs:
+          - to: 'alerts@example.com'
+
+      - name: 'slack-quarantine-ops'
+        slack_configs:
+          - api_url: 'https://hooks.slack.com/services/T00000000/B00000000'
+            channel: '#quarantine-ops-alerts'
+
+      - name: 'pagerduty-critical-dev'
+        pagerduty_configs:
+          - service_key: 'YOUR_PAGERDUTY_SERVICE_KEY'
+
+      - name: 'email-staging'
+        email_configs:
+          - to: 'staging-alerts@example.com'
+
+      - name: 'slack-prod-warning'
+        slack_configs:
+          - api_url: 'https://hooks.slack.com/services/T00000000/B11111111'
+            channel: '#prod-warning-alerts'
+
+      - name: 'slack-network-team'
+        slack_configs:
+          - api_url: 'https://hooks.slack.com/services/T00000000/B22222222'
+            channel: '#network-team-alerts'
+
+      - name: 'slack-qa-alerts'
+        slack_configs:
+          - api_url: 'https://hooks.slack.com/services/T00000000/B33333333'
+            channel: '#qa-alerts'
+
+      - name: 'email-database-service'
+        email_configs:
+          - to: 'database-service-alerts@example.com'
