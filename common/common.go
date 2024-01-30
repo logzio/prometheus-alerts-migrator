@@ -82,13 +82,13 @@ func NewConfig() *Config {
 	ignoreSlackText := getEnvWithFallback("IGNORE_SLACK_TEXT", strconv.FormatBool(*ignoreSlackTextFlag))
 	ignoreSlackTextBool, err := strconv.ParseBool(ignoreSlackText)
 	if err != nil {
-		klog.Fatal("Invalid value for IGNORE_SLACK_TEXT")
+		klog.Fatal("Invalid value for IGNORE_SLACK_TEXT: ", err.Error())
 	}
 
 	ignoreSlackTitle := getEnvWithFallback("IGNORE_SLACK_TITLE", strconv.FormatBool(*ignoreSlackTitleFlag))
 	ignoreSlackTitleBool, err := strconv.ParseBool(ignoreSlackTitle)
 	if err != nil {
-		klog.Fatal("Invalid value for IGNORE_SLACK_TITLE")
+		klog.Fatal("Invalid value for IGNORE_SLACK_TITLE", err.Error())
 	}
 
 	// api token is mandatory
