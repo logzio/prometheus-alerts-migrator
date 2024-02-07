@@ -18,13 +18,14 @@ import (
 )
 
 const (
-	refIdA                 = "A"
-	refIdB                 = "B"
-	expressionString       = "__expr__"
-	queryType              = "query"
-	alertFolder            = "prometheus-alerts"
-	randomStringLength     = 5
-	grafanaDefaultReceiver = "default-email"
+	refIdA                           = "A"
+	refIdB                           = "B"
+	expressionString                 = "__expr__"
+	queryType                        = "query"
+	alertFolder                      = "prometheus-alerts"
+	randomStringLength               = 5
+	grafanaDefaultReceiver           = "default-email"
+	alertManagerConfigSizeLimitBytes = 66560
 )
 
 // ReduceQueryModel represents a reduce query for time series data
@@ -150,6 +151,18 @@ func (l *LogzioGrafanaAlertsClient) SetNotificationPolicyTreeFromRouteTree(route
 		existingContactPoints[contactPoint.Name] = true
 	}
 	notificationPolicyTree := l.convertRouteTreeToNotificationPolicyTree(routeTree, existingContactPoints)
+	// Serialize notificationPolicyTree to JSON to check if it exceeds `alertManagerConfigSizeLimitBytes`
+	notificationPolicyTreeJSON, err := json.Marshal(notificationPolicyTree)
+	if err != nil {
+		klog.Errorf("Failed to serialize notification policy tree: %v", err)
+		return
+	}
+	// Check if serialized notificationPolicyTree exceeds 65KB
+	if len(notificationPolicyTreeJSON) > alertManagerConfigSizeLimitBytes {
+		klog.Errorf("Serialized notification policy tree exceeds 65KB limit, size: %d bytes", len(notificationPolicyTreeJSON))
+		return
+	}
+
 	err = l.logzioNotificationPolicyClient.SetupGrafanaNotificationPolicyTree(notificationPolicyTree)
 	if err != nil {
 		klog.Errorf("Failed to create notification policy tree: %v", err)
