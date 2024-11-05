@@ -3,6 +3,8 @@ package controller
 import (
 	"context"
 	"fmt"
+	"time"
+
 	"github.com/logzio/logzio_terraform_client/grafana_alerts"
 	"github.com/logzio/logzio_terraform_client/grafana_contact_points"
 	"github.com/logzio/prometheus-alerts-migrator/common"
@@ -19,7 +21,6 @@ import (
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog/v2"
-	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -435,19 +436,36 @@ func (c *Controller) extractValues(cm *corev1.ConfigMap) []rulefmt.RuleNode {
 
 	fallbackNameStub := common.CreateNameStub(cm)
 
-	var toalRules []rulefmt.RuleNode
+	var rules []rulefmt.RuleNode
 
 	for key, value := range cm.Data {
-		// try each encoding
-		// try to extract a rules
-		var rule rulefmt.RuleNode
-		var err error
-		err, rule = c.extractRules(value)
-		if err != nil {
-			errorMsg := fmt.Sprintf("Configmap: %s key: %s Error during extraction.", fallbackNameStub, key)
-			c.configmapEventRecorderFunc(cm, corev1.EventTypeWarning, ErrInvalidKey, errorMsg)
+		if key == "" || value == "" {
+			continue
 		}
 
+		// Try to extract grouped rules first
+		var multiRuleGroups MultiRuleGroups
+		err := yaml.Unmarshal([]byte(value), &multiRuleGroups)
+		if err == nil && len(multiRuleGroups.Values) > 0 {
+			for _, ruleGroup := range multiRuleGroups.Values {
+				for _, group := range ruleGroup.Groups {
+					for _, rule := range group.Rules {
+						rules = append(rules, rule)
+					}
+				}
+			}
+			continue
+		}
+		// If not grouped, try to extract individual rule
+		err, rule := c.extractRules(value)
+		if err != nil {
+			klog.Warningf("Configmap: %s - key: %s Error during extraction.", cm.Name, key)
+			klog.Warningf("%v", err)
+			c.recordEventOnConfigMap(cm, corev1.EventTypeWarning, ErrInvalidKey, fmt.Sprintf("Configmap: %s - key: %s Error during extraction.", cm.Name, key))
+			c.recordEventOnConfigMap(cm, corev1.EventTypeWarning, ErrInvalidKey, fmt.Sprintf("%v", err))
+			c.recordEventOnConfigMap(cm, corev1.EventTypeWarning, ErrInvalidKey, fmt.Sprintf("Configmap: %s - key: %s Rejected, no valid rules.", cm.Name, key))
+			continue
+		}
 		// Add unique name for the alert rule to prevent duplicate rules ([alert_name]-[configmap_name]-[configmap_namespace])
 		rule.Alert.Value = fmt.Sprintf("%s-%s-%s", cm.Name, cm.Namespace, key)
 
@@ -466,13 +484,14 @@ func (c *Controller) extractValues(cm *corev1.ConfigMap) []rulefmt.RuleNode {
 
 			} else {
 				// add to the rulegroups
-				toalRules = append(toalRules, rule)
+				rules = append(rules, rule)
 			}
 		}
 	}
-	klog.Info(fmt.Sprintf("Found %d rules in %s configmap", len(toalRules), cm.Name))
 
-	return toalRules
+	klog.Info(fmt.Sprintf("Found %d rules in %s configmap", len(rules), cm.Name))
+
+	return rules
 }
 
 // extractRules extracts the rules from the configmap key
