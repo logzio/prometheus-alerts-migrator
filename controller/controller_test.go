@@ -78,6 +78,107 @@ func TestExtractValues(t *testing.T) {
 			},
 			expectedRules: 1,
 		},
+		{
+			name: "configmap with grouped rules",
+			configMap: &v1.ConfigMap{
+				Data: map[string]string{
+					"group_rules1": `
+				groups:
+				- name: high_latency_memory_usage_group
+				  rules:
+				  - alert: High_Latency
+				    expr: histogram_quantile(0.95, sum(rate(otelcol_process_latency_seconds_bucket{app="test-otel-collector"}[5m])) by (le)) > 0.6
+				    for: 5m
+				    labels:
+				      team: "sre"
+				      severity: "critical"
+				      purpose: "test"
+				    annotations:
+				      description: "95th percentile latency is above 600ms for the test OpenTelemetry collector test"
+				      summary: "High 95th percentile latency observed in test environment"
+				  - alert: High_Memory_Usage
+				    expr: sum by (instance) (container_memory_usage_bytes{container="otel-collector-test"}) / sum by (instance) (container_spec_memory_limit_bytes{container="otel-collector-test"}) > 0.7
+				    for: 5m
+				    labels:
+				      team: "sre"
+				      severity: "warning"
+				      purpose: "test"
+				    annotations:
+				      description: "Memory usage for the test OpenTelemetry collector is above 70% of the limit"
+				      summary: "High memory usage detected for the test OpenTelemetry collector"
+				`,
+				},
+			},
+			expectedRules: 2,
+		},
+		{
+			name: "configmap with grouped rules and single rule",
+			configMap: &v1.ConfigMap{
+				Data: map[string]string{
+					"rule1": "alert: HighLatency\nexpr: job:request_latency_seconds:mean5m{job=\"myjob\"} > 0.5\nfor: 10m\n",
+					"group_rules1": `
+				groups:
+				- name: packet_loss_group
+				  rules:
+				  - alert: Packet_Loss
+				    expr: rate(packet_loss_total{app="test-network"}[5m]) > 0.1
+				    for: 5m
+				    labels:
+				      team: "network"
+				      severity: "critical"
+				      purpose: "test"
+				    annotations:
+				      description: "Packet loss rate is above 10% on the test network"
+				      summary: "Significant packet loss detected in test network"
+				  - alert: Disk_Usage
+				    expr: (node_filesystem_size_bytes{mountpoint="/var/lib/docker"} - node_filesystem_free_bytes{mountpoint="/var/lib/docker"}) / node_filesystem_size_bytes{mountpoint="/var/lib/docker"} > 0.8
+				    for: 5m
+				    labels:
+					  team: "ops"
+					  severity: "warning"
+					  purpose: "test"
+				    annotations:
+					  description: "Disk usage for /var/lib/docker is above 80%"
+					  summary: "High disk usage detected on /var/lib/docker"
+				`,
+				},
+			},
+			expectedRules: 3,
+		},
+		{ // Test case for grouped rules with invalid rule data
+			name: "configmap with grouped rules and invalid rule",
+			configMap: &v1.ConfigMap{
+				Data: map[string]string{
+					"invalid_rule": "this is not a valid prometheus rule data",
+					"group_rules1": `
+				groups:
+				- name: packet_loss_group
+				  rules:
+				  - alert: Packet_Loss
+				    expr: rate(packet_loss_total{app="test-network"}[5m]) > 0.1
+				    for: 5m
+				    labels:
+				      team: "network"
+				      severity: "critical"
+				      purpose: "test"
+				    annotations:
+				      description: "Packet loss rate is above 10% on the test network"
+				      summary: "Significant packet loss detected in test network"
+				  - alert: Disk_Usage
+				    expr: (node_filesystem_size_bytes{mountpoint="/var/lib/docker"} - node_filesystem_free_bytes{mountpoint="/var/lib/docker"}) / node_filesystem_size_bytes{mountpoint="/var/lib/docker"} > 0.8
+				    for: 5m
+				    labels:
+					  team: "ops"
+					  severity: "warning"
+					  purpose: "test"
+				    annotations:
+					  description: "Disk usage for /var/lib/docker is above 80%"
+					  summary: "High disk usage detected on /var/lib/docker"
+				`,
+				},
+			},
+			expectedRules: 2,
+		},
 	}
 
 	for _, tc := range testCases {

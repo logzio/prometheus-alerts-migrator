@@ -61,10 +61,7 @@ type Controller struct {
 	alertManagerAnnotation *string
 
 	configmapEventRecorderFunc func(cm *corev1.ConfigMap, eventtype, reason, msg string)
-}
-
-type MultiRuleGroups struct {
-	Values []rulefmt.RuleGroups
+	ruleGroupsName             string
 }
 
 func NewController(
@@ -429,15 +426,41 @@ func (c *Controller) getClusterAlertRules(mapList *corev1.ConfigMapList) *[]rule
 	}
 	return &finalRules
 }
+func (c *Controller) extractRuleGroups(configmapData map[string]string) *[]rulefmt.RuleNode {
+	var finalRules []rulefmt.RuleNode
 
-// extractValues extracts the rules from the configmap, and validates them
-func (c *Controller) extractValues(cm *corev1.ConfigMap) []rulefmt.RuleNode {
+	for key, value := range configmapData {
+		var ruleGroups rulefmt.RuleGroups
+		err := yaml.Unmarshal([]byte(value), &ruleGroups)
+		if err != nil {
+			klog.Warningf("Error unmarshalling rule groups from key %s: %v", key, err)
+			continue
+		}
+		for _, ruleGroup := range ruleGroups.Groups {
+			c.ruleGroupsName = ruleGroup.Name
+			for _, rule := range ruleGroup.Rules {
+				if len(rule.Expr.Value) == 0 {
+					klog.Warningf("0:0: field 'expr' must be set in rule")
+					continue
+				} else {
+					if rule.Annotations == nil {
+						rule.Annotations = make(map[string]string)
+					}
+					// add to the rulegroups
+					rule.Annotations["ruleGroupsName"] = c.ruleGroupsName
+					finalRules = append(finalRules, rule)
+				}
 
-	fallbackNameStub := common.CreateNameStub(cm)
+			}
+		}
+	}
 
-	var toalRules []rulefmt.RuleNode
+	return &finalRules
+}
 
-	for key, value := range cm.Data {
+func (c *Controller) extractSingleRules(configmapData map[string]string, fallbackNameStub string, cm *corev1.ConfigMap) *[]rulefmt.RuleNode {
+	var finalRules []rulefmt.RuleNode
+	for key, value := range configmapData {
 		// try each encoding
 		// try to extract a rules
 		var rule rulefmt.RuleNode
@@ -447,7 +470,6 @@ func (c *Controller) extractValues(cm *corev1.ConfigMap) []rulefmt.RuleNode {
 			errorMsg := fmt.Sprintf("Configmap: %s key: %s Error during extraction.", fallbackNameStub, key)
 			c.configmapEventRecorderFunc(cm, corev1.EventTypeWarning, ErrInvalidKey, errorMsg)
 		}
-
 		// Add unique name for the alert rule to prevent duplicate rules ([alert_name]-[configmap_name]-[configmap_namespace])
 		rule.Alert.Value = fmt.Sprintf("%s-%s-%s", cm.Name, cm.Namespace, key)
 
@@ -465,14 +487,38 @@ func (c *Controller) extractValues(cm *corev1.ConfigMap) []rulefmt.RuleNode {
 				c.configmapEventRecorderFunc(cm, corev1.EventTypeWarning, ErrInvalidKey, failMessage)
 
 			} else {
+				if rule.Annotations == nil {
+					rule.Annotations = make(map[string]string)
+				}
+				rule.Annotations["ruleGroupsName"] = rule.Alert.Value
 				// add to the rulegroups
-				toalRules = append(toalRules, rule)
+				finalRules = append(finalRules, rule)
 			}
 		}
 	}
-	klog.Info(fmt.Sprintf("Found %d rules in %s configmap", len(toalRules), cm.Name))
+	return &finalRules
+}
 
-	return toalRules
+// extractValues extracts the rules from the configmap, and validates them
+func (c *Controller) extractValues(cm *corev1.ConfigMap) []rulefmt.RuleNode {
+	fallbackNameStub := common.CreateNameStub(cm)
+	configmapData := cm.Data
+	var totalRules []rulefmt.RuleNode
+	groupRules := c.extractRuleGroups(configmapData)
+	if len(*groupRules) > 0 {
+		klog.Info(fmt.Sprintf("Found %d grouped alert rules in %s configmap", len(totalRules), cm.Name))
+		totalRules = append(totalRules, *groupRules...)
+	}
+
+	singleRules := c.extractSingleRules(configmapData, fallbackNameStub, cm)
+	if len(*singleRules) > 0 {
+		klog.Info(fmt.Sprintf("Found %d alert rules in %s configmap", len(*singleRules), cm.Name))
+		totalRules = append(totalRules, *singleRules...)
+
+	}
+	klog.Info(fmt.Sprintf("Found total %d alert rules in %s configmap", len(totalRules), cm.Name))
+
+	return totalRules
 }
 
 // extractRules extracts the rules from the configmap key
