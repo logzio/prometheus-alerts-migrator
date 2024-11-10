@@ -10,77 +10,51 @@ metadata:
 data:
   high_latency_memory_usage_grouped: |
     groups:
-    - name: high_latency_memory_usage_group
-      rules:
-      - alert: High_Latency
-        expr: histogram_quantile(0.95, sum(rate(otelcol_process_latency_seconds_bucket{app="test-otel-collector"}[5m])) by (le)) > 0.6
-        for: 5m
-        labels:
-          team: "sre"
-          severity: "critical"
-          purpose: "test"
-        annotations:
-          description: "95th percentile latency is above 600ms for the test OpenTelemetry collector test"
-          summary: "High 95th percentile latency observed in test environment"
-      - alert: High_Memory_Usage
-        expr: sum by (instance) (container_memory_usage_bytes{container="otel-collector-test"}) / sum by (instance) (container_spec_memory_limit_bytes{container="otel-collector-test"}) > 0.7
-        for: 5m
-        labels:
-          team: "sre"
-          severity: "warning"
-          purpose: "test"
-        annotations:
-          description: "Memory usage for the test OpenTelemetry collector is above 70% of the limit"
-          summary: "High memory usage detected for the test OpenTelemetry collector"
-
+      - name: high_latency_memory_usage_group
+        rules:
+          - alert: High_Latency
+            expr: histogram_quantile(0.95, sum(rate(otelcol_process_latency_seconds_bucket{app="test-otel-collector"}[5m])) by (le)) > 0.6
+            for: 5m
+            labels:
+              team: "sre"
+              severity: "critical"
+              purpose: "test"
+            annotations:
+              description: "95th percentile latency is above 600ms for the test OpenTelemetry collector test"
+              summary: "High 95th percentile latency observed in test environment"
+          - alert: High_Memory_Usage
+            expr: sum by (instance) (container_memory_usage_bytes{container="otel-collector-test"}) / sum by (instance) (container_spec_memory_limit_bytes{container="otel-collector-test"}) > 0.7
+            for: 5m
+            labels:
+              team: "sre"
+              severity: "warning"
+              purpose: "test"
+            annotations:
+              description: "Memory usage for the test OpenTelemetry collector is above 70% of the limit"
+              summary: "High memory usage detected for the test OpenTelemetry collector"
+      - name: high_latency_memory_usage_group
+        rules:
+          - alert: High_Latency
+            expr: histogram_quantile(0.95, sum(rate(otelcol_process_latency_seconds_bucket{app="test-otel-collector"}[5m])) by (le)) > 0.6
+            for: 5m
+            labels:
+              team: "sre"
+              severity: "critical"
+              purpose: "test"
+            annotations:
+              description: "95th percentile latency is above 600ms for the test OpenTelemetry collector test"
+              summary: "High 95th percentile latency observed in test environment"
   cpu_usage_grouped: |
     groups:
-    - name: cpu_usage_group
-      rules:  
-      - alert: High_CPU_Usage  
-        expr: sum(rate(container_cpu_usage_seconds_total{container="otel-collector-test"}[5m])) by (instance) > 0.9
-        for: 5m
-        labels:
-          team: "sre"
-          severity: "warning"
-          purpose: "test"
-        annotations:
-          description: "CPU usage for the test OpenTelemetry collector is above 90%"
-          summary: "High CPU usage detected for the test OpenTelemetry collector"
-
-  packet_loss_grouped_api_response_single: |
-    groups:
-    - name: packet_loss_group
-      rules:  
-      - alert: Packet_Loss
-        expr: rate(packet_loss_total{app="test-network"}[5m]) > 0.1
-        for: 5m
-        labels:
-          team: "network"
-          severity: "critical"
-          purpose: "test"
-        annotations:
-          description: "Packet loss rate is above 10% on the test network"
-          summary: "Significant packet loss detected in test network"
-    alert: API_Response_Failure  
-    expr: rate(api_response_failures{endpoint="/test-api"}[5m]) > 0.05
-    for: 5m
-    labels:
-      team: "backend"
-      severity: "major"
-      purpose: "test"
-    annotations:
-      description: "API endpoint /test-api is failing more than 5% of the time"
-      summary: "High failure rate detected on /test-api endpoint"
-
-  disk_usage: |
-    alert: Disk_Usage  
-    expr: (node_filesystem_size_bytes{mountpoint="/var/lib/docker"} - node_filesystem_free_bytes{mountpoint="/var/lib/docker"}) / node_filesystem_size_bytes{mountpoint="/var/lib/docker"} > 0.8
-    for: 5m
-    labels:
-      team: "ops"
-      severity: "warning"
-      purpose: "test"
-    annotations:
-      description: "Disk usage for /var/lib/docker is above 80%"
-      summary: "High disk usage detected on /var/lib/docker"
+      - name: cpu_usage_group
+      rules:
+        - alert: High_CPU_Usage
+          expr: sum(rate(container_cpu_usage_seconds_total{container="otel-collector-test"}[5m])) by (instance) > 0.9
+          for: 5m
+          labels:
+            team: "sre"
+            severity: "warning"
+            purpose: "test"
+          annotations:
+            description: "CPU usage for the test OpenTelemetry collector is above 90%"
+            summary: "High CPU usage detected for the test OpenTelemetry collector"

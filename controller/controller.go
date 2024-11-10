@@ -433,7 +433,7 @@ func (c *Controller) extractRuleGroups(configmapData map[string]string) *[]rulef
 		var ruleGroups rulefmt.RuleGroups
 		err := yaml.Unmarshal([]byte(value), &ruleGroups)
 		if err != nil {
-			klog.Warningf("Error unmarshalling rule groups from key %s: %v", key, err)
+			klog.Warningf("Error unmarshalling rule groups from key %s: %v\n Value: %s", key, err, value)
 			continue
 		}
 		for _, ruleGroup := range ruleGroups.Groups {
@@ -506,7 +506,7 @@ func (c *Controller) extractValues(cm *corev1.ConfigMap) []rulefmt.RuleNode {
 	var totalRules []rulefmt.RuleNode
 	groupRules := c.extractRuleGroups(configmapData)
 	if len(*groupRules) > 0 {
-		klog.Info(fmt.Sprintf("Found %d grouped alert rules in %s configmap", len(totalRules), cm.Name))
+		klog.Info(fmt.Sprintf("Found %d grouped alert rules in %s configmap", len(*groupRules), cm.Name))
 		totalRules = append(totalRules, *groupRules...)
 	}
 
@@ -529,7 +529,7 @@ func (c *Controller) extractRules(value string) (error, rulefmt.RuleNode) {
 		return err, rulefmt.RuleNode{}
 	}
 	if len(rule.Alert.Value) == 0 {
-		return fmt.Errorf("no Rules found"), rule
+		return fmt.Errorf("failed to extract rule, alert rule not found"), rule
 	}
 	return nil, rule
 }
