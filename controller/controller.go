@@ -462,10 +462,10 @@ func (c *Controller) validateAndRecordRule(rule rulefmt.RuleNode, cm *corev1.Con
 
 // extractValues extracts the rules from the configmap, and validates them
 func (c *Controller) extractValues(cm *corev1.ConfigMap) (totalRules []rulefmt.RuleNode) {
-	// Create a name stub for the configmap
+
 	fallbackNameStub := common.CreateNameStub(cm)
 	configmapData := cm.Data
-	// Iterate over the configmap keys and extract the rules
+
 	for key, value := range configmapData {
 		// Check if the rule contains groups
 		var ruleGroups rulefmt.RuleGroups
@@ -478,7 +478,7 @@ func (c *Controller) extractValues(cm *corev1.ConfigMap) (totalRules []rulefmt.R
 					c.validateAndRecordRule(rule, cm, fallbackNameStub, key, &totalRules)
 				}
 			}
-			continue // Skip the rest of the loop, as we've already processed the rules in the groups
+			continue
 		}
 
 		// Process single rules
@@ -490,7 +490,6 @@ func (c *Controller) extractValues(cm *corev1.ConfigMap) (totalRules []rulefmt.R
 			continue
 		}
 
-		// Validate and record the rule
 		c.validateAndRecordRule(rule, cm, fallbackNameStub, key, &totalRules)
 	}
 
