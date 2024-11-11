@@ -1,5 +1,5 @@
 IMAGE_NAME := prometheus-alerts-migrator
-IMAGE_TAG ?= v1.0.2
+IMAGE_TAG ?= v1.1.0
 DOCKER_REPO := logzio/$(IMAGE_NAME):$(IMAGE_TAG)
 
 
@@ -18,4 +18,4 @@ install-tools:
 	go install golang.org/x/tools/cmd/goimports@latest
 	go install github.com/client9/misspell/cmd/misspell@latest
 	go install github.com/pavius/impi/cmd/impi@latest
-	go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.47.3
+	go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.61.0

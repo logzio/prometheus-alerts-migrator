@@ -1,0 +1,60 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: infrastructure-rules-groups
+  namespace: alert-migrator-test
+  labels:
+    app: prometheus
+  annotations:
+    prometheus.io/kube-rules: "true"
+data:
+  high_latency_memory_usage_grouped: |
+    groups:
+      - name: high_latency_memory_usage_group
+        rules:
+          - alert: High_Latency
+            expr: histogram_quantile(0.95, sum(rate(otelcol_process_latency_seconds_bucket{app="test-otel-collector"}[5m])) by (le)) > 0.6
+            for: 5m
+            labels:
+              team: "sre"
+              severity: "critical"
+              purpose: "test"
+            annotations:
+              description: "95th percentile latency is above 600ms for the test OpenTelemetry collector test"
+              summary: "High 95th percentile latency observed in test environment"
+          - alert: High_Memory_Usage
+            expr: sum by (instance) (container_memory_usage_bytes{container="otel-collector-test"}) / sum by (instance) (container_spec_memory_limit_bytes{container="otel-collector-test"}) > 0.7
+            for: 5m
+            labels:
+              team: "sre"
+              severity: "warning"
+              purpose: "test"
+            annotations:
+              description: "Memory usage for the test OpenTelemetry collector is above 70% of the limit"
+              summary: "High memory usage detected for the test OpenTelemetry collector"
+      - name: high_latency_memory_usage_group
+        rules:
+          - alert: High_Latency
+            expr: histogram_quantile(0.95, sum(rate(otelcol_process_latency_seconds_bucket{app="test-otel-collector"}[5m])) by (le)) > 0.6
+            for: 5m
+            labels:
+              team: "sre"
+              severity: "critical"
+              purpose: "test"
+            annotations:
+              description: "95th percentile latency is above 600ms for the test OpenTelemetry collector test"
+              summary: "High 95th percentile latency observed in test environment"
+  cpu_usage_grouped: |
+    groups:
+      - name: cpu_usage_group
+      rules:
+        - alert: High_CPU_Usage
+          expr: sum(rate(container_cpu_usage_seconds_total{container="otel-collector-test"}[5m])) by (instance) > 0.9
+          for: 5m
+          labels:
+            team: "sre"
+            severity: "warning"
+            purpose: "test"
+          annotations:
+            description: "CPU usage for the test OpenTelemetry collector is above 90%"
+            summary: "High CPU usage detected for the test OpenTelemetry collector"

@@ -45,7 +45,7 @@ The controller is designed to process ConfigMaps containing Prometheus alert rul
 
 ### Example rules configMap
 
-Below is an example of how a rules configMap should be structured:
+Below is an example of how a rules configMap should be structured per alert rule:
 
 ```yaml
 apiVersion: v1
@@ -67,6 +67,45 @@ data:
       description: "The OpenTelemetry collector has been down for more than 5 minutes."
       summary: "Instance down"
 ```
+
+Below is an example of how a rules configMap should be structured per alert rule group:
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: logzio-grouped-rules
+  namespace: monitoring
+  annotations:
+    prometheus.io/kube-rules: "true"
+data:
+  high_latency_memory_usage_grouped: |
+    groups:
+    - name: high_latency
+      rules:
+      - alert: High_Latency
+        expr: histogram_quantile(0.95, sum(rate(otelcol_process_latency_seconds_bucket{app="test-otel-collector"}[5m])) by (le)) > 0.6
+        for: 5m
+        labels:
+          team: "sre"
+          severity: "critical"
+          purpose: "test"
+        annotations:
+          description: "95th percentile latency is above 600ms for the test OpenTelemetry collector test"
+          summary: "High 95th percentile latency observed in test environment"
+      - alert: High_Memory_Usage
+        expr: sum by (instance) (container_memory_usage_bytes{container="otel-collector-test"}) / sum by (instance) (container_spec_memory_limit_bytes{container="otel-collector-test"}) > 0.7
+        for: 5m
+        labels:
+          team: "sre"
+          severity: "warning"
+          purpose: "test"
+        annotations:
+          description: "Memory usage for the test OpenTelemetry collector is above 70% of the limit"
+          summary: "High memory usage detected for the test OpenTelemetry collector"
+```
+
+
 - Replace `prometheus.io/kube-rules` with the actual annotation you use to identify relevant ConfigMaps. The data section should contain your Prometheus alert rules in YAML format.
 - Deploy the configmap to your cluster `kubectl apply -f <configmap-file>.yml`
 
@@ -128,6 +167,18 @@ data:
 
 
 ## Changelog
+- v1.1.0
+  - Add support for migrating alert rules groups
+  - Upgrade GoLang version to 1.23
+  - Upgrade dependencies
+    - `k8s.io/client-go`: `v0.28.3` -> `v0.31.2`
+    - `k8s.io/apimachinery`: `v0.28.3` -> `v0.31.2`
+    - `k8s.io/api`: `v0.28.3` -> `v0.31.2`
+    - `k8s.io/klog/v2`: `v2.110.1` -> `v2.130.1`
+    - `logzio_terraform_client`: `1.20.0` -> `1.22.0`
+    - `prometheus/common`: `v0.44.0` -> `v0.60.1`
+    - `prometheus/alertmanager`: `v0.26.0` -> `v0.27.0`
+    - `prometheus/prometheus`: `v0.47.2` -> `v0.55.0`
 - v1.0.3
   - Handle Prometheus alert manager configuration file
   - Add CRUD operations for contact points and notification policies

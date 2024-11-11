@@ -447,7 +447,7 @@ func (l *LogzioGrafanaAlertsClient) generateGrafanaAlert(rule rulefmt.RuleNode, 
 		ExecErrState: grafana_alerts.ErrOK,
 		Labels:       rule.Labels,
 		OrgID:        1,
-		RuleGroup:    rule.Alert.Value,
+		RuleGroup:    rule.Annotations["ruleGroupsName"],
 		Title:        rule.Alert.Value,
 		For:          duration,
 	}
