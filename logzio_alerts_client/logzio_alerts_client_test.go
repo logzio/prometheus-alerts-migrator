@@ -148,24 +148,24 @@ func TestGenerateGrafanaContactPoint(t *testing.T) {
 			expectedLength: 1,
 			expectedType:   common.TypePagerDuty,
 		},
-		//{
-		//	name: "Microsoft Teams Configuration",
-		//	receiver: config.Receiver{
-		//		MSTeamsConfigs: []*config.MSTeamsConfig{
-		//			{
-		//				WebhookURL: &config.SecretURL{
-		//					URL: &url.URL{
-		//						Scheme: "https",
-		//						Host:   "api.teams.com",
-		//						Path:   "/api/chat.postMessage",
-		//					},
-		//				},
-		//			},
-		//		},
-		//	},
-		//	expectedLength: 1,
-		//	expectedType:   common.TypeMsTeams,
-		//},
+		{
+			name: "Microsoft Teams Configuration",
+			receiver: config.Receiver{
+				MSTeamsConfigs: []*config.MSTeamsConfig{
+					{
+						WebhookURL: &config.SecretURL{
+							URL: &url.URL{
+								Scheme: "https",
+								Host:   "api.teams.com",
+								Path:   "/api/chat.postMessage",
+							},
+						},
+					},
+				},
+			},
+			expectedLength: 1,
+			expectedType:   common.TypeMsTeams,
+		},
 	}
 
 	for _, tc := range testCases {
