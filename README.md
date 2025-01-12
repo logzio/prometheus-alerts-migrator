@@ -12,6 +12,7 @@ Before running this software, ensure you have:
 - `Email`
 - `Slack`
 - `Pagerduty`
+- `MS Teams`
 
 More types will be supported in the future, If you have a specific request please post an issue with your request
 
@@ -167,6 +168,8 @@ data:
 
 
 ## Changelog
+- v1.2.0
+  - Add support MS Teams contact points
 - v1.1.0
   - Add support for migrating alert rules groups
   - Upgrade GoLang version to 1.23
