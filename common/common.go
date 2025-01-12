@@ -3,7 +3,7 @@ package common
 import (
 	"flag"
 	"fmt"
-	"github.com/logzio/logzio_terraform_client/grafana_alerts"
+	grafanaalerts "github.com/logzio/logzio_terraform_client/grafana_alerts"
 	"github.com/prometheus/prometheus/model/rulefmt"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/rest"
@@ -192,7 +192,7 @@ func CreateNameStub(cm *corev1.ConfigMap) string {
 }
 
 // IsAlertEqual compares two AlertRule objects for equality.
-func IsAlertEqual(rule rulefmt.RuleNode, grafanaRule grafana_alerts.GrafanaAlertRule) bool {
+func IsAlertEqual(rule rulefmt.RuleNode, grafanaRule grafanaalerts.GrafanaAlertRule) bool {
 	// Start with name comparison; if these don't match, they're definitely not equal.
 	if rule.Alert.Value != grafanaRule.Title {
 		return false
