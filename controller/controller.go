@@ -97,7 +97,7 @@ func NewController(
 
 	controller.configmapEventRecorderFunc = controller.recordEventOnConfigMap
 	klog.Info("Setting up event handlers")
-	configmapInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+	_, err := configmapInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: controller.enqueueConfigMap,
 		UpdateFunc: func(old, new interface{}) {
 			newCM := new.(*corev1.ConfigMap)
@@ -109,6 +109,10 @@ func NewController(
 		},
 		DeleteFunc: controller.enqueueConfigMap,
 	})
+	if err != nil {
+		klog.Errorf("Failed to set up event handlers: %v", err)
+		return nil
+	}
 
 	return controller
 }
