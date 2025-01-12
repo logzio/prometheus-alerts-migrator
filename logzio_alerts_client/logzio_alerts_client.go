@@ -3,13 +3,13 @@ package logzio_alerts_client
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/logzio/logzio_terraform_client/grafana_alerts"
-	"github.com/logzio/logzio_terraform_client/grafana_contact_points"
-	"github.com/logzio/logzio_terraform_client/grafana_datasources"
-	"github.com/logzio/logzio_terraform_client/grafana_folders"
-	"github.com/logzio/logzio_terraform_client/grafana_notification_policies"
+	grafanaalerts "github.com/logzio/logzio_terraform_client/grafana_alerts"
+	grafanacontactpoints "github.com/logzio/logzio_terraform_client/grafana_contact_points"
+	grafanadatasources "github.com/logzio/logzio_terraform_client/grafana_datasources"
+	grafanafolders "github.com/logzio/logzio_terraform_client/grafana_folders"
+	grafananotificationpolicies "github.com/logzio/logzio_terraform_client/grafana_notification_policies"
 	"github.com/logzio/prometheus-alerts-migrator/common"
-	alert_manager_config "github.com/prometheus/alertmanager/config"
+	alertmanagerconfig "github.com/prometheus/alertmanager/config"
 	"github.com/prometheus/prometheus/model/rulefmt"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/klog/v2"
@@ -63,12 +63,12 @@ func (p PrometheusQueryModel) ToJSON() (json.RawMessage, error) {
 }
 
 type LogzioGrafanaAlertsClient struct {
-	AlertManagerGlobalConfig       *alert_manager_config.GlobalConfig
-	logzioAlertClient              *grafana_alerts.GrafanaAlertClient
-	logzioFolderClient             *grafana_folders.GrafanaFolderClient
-	logzioDataSourceClient         *grafana_datasources.GrafanaDatasourceClient
-	logzioContactPointClient       *grafana_contact_points.GrafanaContactPointClient
-	logzioNotificationPolicyClient *grafana_notification_policies.GrafanaNotificationPolicyClient
+	AlertManagerGlobalConfig       *alertmanagerconfig.GlobalConfig
+	logzioAlertClient              *grafanaalerts.GrafanaAlertClient
+	logzioFolderClient             *grafanafolders.GrafanaFolderClient
+	logzioDataSourceClient         *grafanadatasources.GrafanaDatasourceClient
+	logzioContactPointClient       *grafanacontactpoints.GrafanaContactPointClient
+	logzioNotificationPolicyClient *grafananotificationpolicies.GrafanaNotificationPolicyClient
 	rulesDataSource                string
 	envId                          string
 	ignoreSlackText                bool
@@ -76,27 +76,27 @@ type LogzioGrafanaAlertsClient struct {
 }
 
 func NewLogzioGrafanaAlertsClient(logzioApiToken string, logzioApiUrl string, rulesDs string, envId string, ignoreSlackText bool, ignoreSlackTitle bool) *LogzioGrafanaAlertsClient {
-	logzioAlertClient, err := grafana_alerts.New(logzioApiToken, logzioApiUrl)
+	logzioAlertClient, err := grafanaalerts.New(logzioApiToken, logzioApiUrl)
 	if err != nil {
 		klog.Errorf("Failed to create logzio alert client: %v", err)
 		return nil
 	}
-	logzioFolderClient, err := grafana_folders.New(logzioApiToken, logzioApiUrl)
+	logzioFolderClient, err := grafanafolders.New(logzioApiToken, logzioApiUrl)
 	if err != nil {
 		klog.Errorf("Failed to create logzio folder client: %v", err)
 		return nil
 	}
-	logzioDataSourceClient, err := grafana_datasources.New(logzioApiToken, logzioApiUrl)
+	logzioDataSourceClient, err := grafanadatasources.New(logzioApiToken, logzioApiUrl)
 	if err != nil {
 		klog.Errorf("Failed to create logzio datasource client: %v", err)
 		return nil
 	}
-	logzioContactPointClient, err := grafana_contact_points.New(logzioApiToken, logzioApiUrl)
+	logzioContactPointClient, err := grafanacontactpoints.New(logzioApiToken, logzioApiUrl)
 	if err != nil {
 		klog.Errorf("Failed to create logzio contact point client: %v", err)
 		return nil
 	}
-	logzioNotificationPolicyClient, err := grafana_notification_policies.New(logzioApiToken, logzioApiUrl)
+	logzioNotificationPolicyClient, err := grafananotificationpolicies.New(logzioApiToken, logzioApiUrl)
 	if err != nil {
 		klog.Errorf("Failed to create logzio notification policy client: %v", err)
 		return nil
@@ -125,9 +125,9 @@ func NewLogzioGrafanaAlertsClient(logzioApiToken string, logzioApiUrl string, ru
 }
 
 func (l *LogzioGrafanaAlertsClient) ResetNotificationPolicyTree() error {
-	defaultGrafanaNotificationPolicy := grafana_notification_policies.GrafanaNotificationPolicyTree{
+	defaultGrafanaNotificationPolicy := grafananotificationpolicies.GrafanaNotificationPolicyTree{
 		Receiver: grafanaDefaultReceiver,
-		Routes:   []grafana_notification_policies.GrafanaNotificationPolicy{},
+		Routes:   []grafananotificationpolicies.GrafanaNotificationPolicy{},
 	}
 	err := l.logzioNotificationPolicyClient.SetupGrafanaNotificationPolicyTree(defaultGrafanaNotificationPolicy)
 	if err != nil {
@@ -137,7 +137,7 @@ func (l *LogzioGrafanaAlertsClient) ResetNotificationPolicyTree() error {
 }
 
 // SetNotificationPolicyTreeFromRouteTree converts route tree to grafana notification policy tree and writes it to logz.io
-func (l *LogzioGrafanaAlertsClient) SetNotificationPolicyTreeFromRouteTree(routeTree *alert_manager_config.Route) {
+func (l *LogzioGrafanaAlertsClient) SetNotificationPolicyTreeFromRouteTree(routeTree *alertmanagerconfig.Route) {
 	// getting logzio contact points to ensure it exists for the notification policy tree
 	logzioContactPoints, err := l.GetLogzioManagedGrafanaContactPoints()
 	if err != nil {
@@ -156,7 +156,7 @@ func (l *LogzioGrafanaAlertsClient) SetNotificationPolicyTreeFromRouteTree(route
 	}
 }
 
-func (l *LogzioGrafanaAlertsClient) convertRouteTreeToNotificationPolicyTree(routeTree *alert_manager_config.Route, existingContactPoints map[string]bool) (notificationPolicyTree grafana_notification_policies.GrafanaNotificationPolicyTree) {
+func (l *LogzioGrafanaAlertsClient) convertRouteTreeToNotificationPolicyTree(routeTree *alertmanagerconfig.Route, existingContactPoints map[string]bool) (notificationPolicyTree grafananotificationpolicies.GrafanaNotificationPolicyTree) {
 	// checking for empty values to avoid nil pointer errors
 	if routeTree.GroupByStr != nil {
 		notificationPolicyTree.GroupBy = routeTree.GroupByStr
@@ -182,7 +182,7 @@ func (l *LogzioGrafanaAlertsClient) convertRouteTreeToNotificationPolicyTree(rou
 }
 
 // generateGrafanaNotificationPolicy generates a GrafanaNotificationPolicy from a alertManagerConfig.Route
-func (l *LogzioGrafanaAlertsClient) generateGrafanaNotificationPolicy(route *alert_manager_config.Route) (notificationPolicy grafana_notification_policies.GrafanaNotificationPolicy) {
+func (l *LogzioGrafanaAlertsClient) generateGrafanaNotificationPolicy(route *alertmanagerconfig.Route) (notificationPolicy grafananotificationpolicies.GrafanaNotificationPolicy) {
 	// checking for empty values to avoid nil pointer errors
 	if route.GroupInterval != nil {
 		notificationPolicy.GroupInterval = route.GroupInterval.String()
@@ -200,11 +200,11 @@ func (l *LogzioGrafanaAlertsClient) generateGrafanaNotificationPolicy(route *ale
 	routeMatchersYaml, err := route.Matchers.MarshalYAML()
 	if err != nil {
 		utilruntime.HandleError(err)
-		return grafana_notification_policies.GrafanaNotificationPolicy{}
+		return grafananotificationpolicies.GrafanaNotificationPolicy{}
 	}
 	// converting the route matchers to the Grafana format
 	routeMatchersList := routeMatchersYaml.([]string)
-	grafanaObjMatchers := grafana_notification_policies.MatchersObj{}
+	grafanaObjMatchers := grafananotificationpolicies.MatchersObj{}
 	for _, routeMatcher := range routeMatchersList {
 		// we split the route matcher by the regex (=|~|=|!=) to convert it to the Grafana format
 		regex := regexp.MustCompile(`(=|~=?|!=)`)
@@ -214,12 +214,12 @@ func (l *LogzioGrafanaAlertsClient) generateGrafanaNotificationPolicy(route *ale
 			key := routeMatcher[:parts[0]]
 			operator := routeMatcher[parts[0]:parts[1]]
 			value := routeMatcher[parts[1]:]
-			grafanaObjMatchers = append(grafanaObjMatchers, grafana_notification_policies.MatcherObj{key, operator, value})
+			grafanaObjMatchers = append(grafanaObjMatchers, grafananotificationpolicies.MatcherObj{key, operator, value})
 		}
 	}
 	// handling `match` operators, although it's deprecated to support users with old prometheus versions
 	for key, value := range route.Match {
-		grafanaObjMatchers = append(grafanaObjMatchers, grafana_notification_policies.MatcherObj{key, "=", value})
+		grafanaObjMatchers = append(grafanaObjMatchers, grafananotificationpolicies.MatcherObj{key, "=", value})
 	}
 	notificationPolicy.ObjectMatchers = grafanaObjMatchers
 	// repeat the process for nested policies
@@ -231,7 +231,7 @@ func (l *LogzioGrafanaAlertsClient) generateGrafanaNotificationPolicy(route *ale
 }
 
 // WriteContactPoints writes the contact points to logz.io
-func (l *LogzioGrafanaAlertsClient) WriteContactPoints(contactPointsToWrite []alert_manager_config.Receiver) {
+func (l *LogzioGrafanaAlertsClient) WriteContactPoints(contactPointsToWrite []alertmanagerconfig.Receiver) {
 	for _, contactPoint := range contactPointsToWrite {
 		contactPointsList := l.generateGrafanaContactPoint(contactPoint)
 		for _, cp := range contactPointsList {
@@ -244,7 +244,7 @@ func (l *LogzioGrafanaAlertsClient) WriteContactPoints(contactPointsToWrite []al
 }
 
 // DeleteContactPoints deletes the contact points from logz.io
-func (l *LogzioGrafanaAlertsClient) DeleteContactPoints(contactPointsToDelete []grafana_contact_points.GrafanaContactPoint) {
+func (l *LogzioGrafanaAlertsClient) DeleteContactPoints(contactPointsToDelete []grafanacontactpoints.GrafanaContactPoint) {
 	for _, contactPoint := range contactPointsToDelete {
 		err := l.logzioContactPointClient.DeleteGrafanaContactPoint(contactPoint.Uid)
 		if err != nil {
@@ -254,7 +254,7 @@ func (l *LogzioGrafanaAlertsClient) DeleteContactPoints(contactPointsToDelete []
 }
 
 // UpdateContactPoints updates the contact points in logz.io
-func (l *LogzioGrafanaAlertsClient) UpdateContactPoints(contactPointsToUpdate []alert_manager_config.Receiver, contactPointsMap []grafana_contact_points.GrafanaContactPoint) {
+func (l *LogzioGrafanaAlertsClient) UpdateContactPoints(contactPointsToUpdate []alertmanagerconfig.Receiver, contactPointsMap []grafanacontactpoints.GrafanaContactPoint) {
 	for _, contactPoint := range contactPointsToUpdate {
 		contactPointsList := l.generateGrafanaContactPoint(contactPoint)
 		for _, cp := range contactPointsList {
@@ -272,10 +272,10 @@ func (l *LogzioGrafanaAlertsClient) UpdateContactPoints(contactPointsToUpdate []
 }
 
 // generateGrafanaContactPoint generates a GrafanaContactPoint from a alertManagerConfig.Receiver
-func (l *LogzioGrafanaAlertsClient) generateGrafanaContactPoint(receiver alert_manager_config.Receiver) (contactPointsList []grafana_contact_points.GrafanaContactPoint) {
+func (l *LogzioGrafanaAlertsClient) generateGrafanaContactPoint(receiver alertmanagerconfig.Receiver) (contactPointsList []grafanacontactpoints.GrafanaContactPoint) {
 	// check for email type configs
 	for _, emailConfig := range receiver.EmailConfigs {
-		contactPoint := grafana_contact_points.GrafanaContactPoint{
+		contactPoint := grafanacontactpoints.GrafanaContactPoint{
 			Name:                  receiver.Name,
 			Type:                  common.TypeEmail,
 			Uid:                   common.GenerateRandomString(9),
@@ -296,7 +296,7 @@ func (l *LogzioGrafanaAlertsClient) generateGrafanaContactPoint(receiver alert_m
 		} else {
 			url = l.AlertManagerGlobalConfig.SlackAPIURL.String()
 		}
-		contactPoint := grafana_contact_points.GrafanaContactPoint{
+		contactPoint := grafanacontactpoints.GrafanaContactPoint{
 			Name:                  receiver.Name,
 			Type:                  common.TypeSlack,
 			Uid:                   common.GenerateRandomString(9),
@@ -318,7 +318,7 @@ func (l *LogzioGrafanaAlertsClient) generateGrafanaContactPoint(receiver alert_m
 	}
 	// check for pagerduty type configs
 	for _, pagerdutyConfig := range receiver.PagerdutyConfigs {
-		contactPoint := grafana_contact_points.GrafanaContactPoint{
+		contactPoint := grafanacontactpoints.GrafanaContactPoint{
 			Name:                  receiver.Name,
 			Type:                  common.TypePagerDuty,
 			Uid:                   common.GenerateRandomString(9),
@@ -334,7 +334,7 @@ func (l *LogzioGrafanaAlertsClient) generateGrafanaContactPoint(receiver alert_m
 	}
 	// check for MS Teams type configs
 	for _, msTeamsConfig := range receiver.MSTeamsConfigs {
-		contactPoint := grafana_contact_points.GrafanaContactPoint{
+		contactPoint := grafanacontactpoints.GrafanaContactPoint{
 			Name:                  receiver.Name,
 			Type:                  common.TypeMsTeams,
 			Uid:                   common.GenerateRandomString(9),
@@ -350,7 +350,7 @@ func (l *LogzioGrafanaAlertsClient) generateGrafanaContactPoint(receiver alert_m
 }
 
 // DeleteRules deletes the rules from logz.io
-func (l *LogzioGrafanaAlertsClient) DeleteRules(rulesToDelete []grafana_alerts.GrafanaAlertRule, folderUid string) {
+func (l *LogzioGrafanaAlertsClient) DeleteRules(rulesToDelete []grafanaalerts.GrafanaAlertRule, folderUid string) {
 	for _, rule := range rulesToDelete {
 		err := l.logzioAlertClient.DeleteGrafanaAlertRule(rule.Uid)
 		if err != nil {
@@ -360,7 +360,7 @@ func (l *LogzioGrafanaAlertsClient) DeleteRules(rulesToDelete []grafana_alerts.G
 }
 
 // UpdateRules updates the rules in logz.io
-func (l *LogzioGrafanaAlertsClient) UpdateRules(rulesToUpdate []rulefmt.RuleNode, logzioRulesMap map[string]grafana_alerts.GrafanaAlertRule, folderUid string) {
+func (l *LogzioGrafanaAlertsClient) UpdateRules(rulesToUpdate []rulefmt.RuleNode, logzioRulesMap map[string]grafanaalerts.GrafanaAlertRule, folderUid string) {
 	for _, rule := range rulesToUpdate {
 		// Retrieve the existing GrafanaAlertRule to get the Uid.
 		existingRule := logzioRulesMap[rule.Alert.Value]
@@ -393,11 +393,11 @@ func (l *LogzioGrafanaAlertsClient) WriteRules(rulesToWrite []rulefmt.RuleNode, 
 }
 
 // generateGrafanaAlert generates a GrafanaAlertRule from a Prometheus rule
-func (l *LogzioGrafanaAlertsClient) generateGrafanaAlert(rule rulefmt.RuleNode, folderUid string) (grafana_alerts.GrafanaAlertRule, error) {
+func (l *LogzioGrafanaAlertsClient) generateGrafanaAlert(rule rulefmt.RuleNode, folderUid string) (grafanaalerts.GrafanaAlertRule, error) {
 	// validate the rule
 	validationErrs := rule.Validate()
 	if len(validationErrs) > 0 {
-		return grafana_alerts.GrafanaAlertRule{}, fmt.Errorf("invalid rule: %v", validationErrs)
+		return grafanaalerts.GrafanaAlertRule{}, fmt.Errorf("invalid rule: %v", validationErrs)
 	}
 	// Create promql query to return time series data for the expression.
 	promqlQuery := PrometheusQueryModel{
@@ -408,14 +408,14 @@ func (l *LogzioGrafanaAlertsClient) generateGrafanaAlert(rule rulefmt.RuleNode, 
 	// Use the ToJSON method to marshal the Query struct.
 	promqlModel, err := promqlQuery.ToJSON()
 	if err != nil {
-		return grafana_alerts.GrafanaAlertRule{}, err
+		return grafanaalerts.GrafanaAlertRule{}, err
 	}
-	queryA := grafana_alerts.GrafanaAlertQuery{
+	queryA := grafanaalerts.GrafanaAlertQuery{
 		DatasourceUid: l.rulesDataSource,
 		Model:         promqlModel,
 		RefId:         refIdA,
 		QueryType:     queryType,
-		RelativeTimeRange: grafana_alerts.RelativeTimeRangeObj{
+		RelativeTimeRange: grafanaalerts.RelativeTimeRangeObj{
 			From: 300,
 			To:   0,
 		},
@@ -434,31 +434,31 @@ func (l *LogzioGrafanaAlertsClient) generateGrafanaAlert(rule rulefmt.RuleNode, 
 	}
 	reduceModel, err := reduceQuery.ToJSON()
 	if err != nil {
-		return grafana_alerts.GrafanaAlertRule{}, err
+		return grafanaalerts.GrafanaAlertRule{}, err
 	}
-	queryB := grafana_alerts.GrafanaAlertQuery{
+	queryB := grafanaalerts.GrafanaAlertQuery{
 		DatasourceUid: expressionString,
 		Model:         reduceModel,
 		RefId:         refIdB,
 		QueryType:     "",
-		RelativeTimeRange: grafana_alerts.RelativeTimeRangeObj{
+		RelativeTimeRange: grafanaalerts.RelativeTimeRangeObj{
 			From: 300,
 			To:   0,
 		},
 	}
 	duration, err := common.ParseDuration(rule.For.String())
 	if err != nil {
-		return grafana_alerts.GrafanaAlertRule{}, err
+		return grafanaalerts.GrafanaAlertRule{}, err
 	}
 
 	// Create the GrafanaAlertRule, we are alerting on the reduced last value of the time series data (query B).
-	grafanaAlert := grafana_alerts.GrafanaAlertRule{
+	grafanaAlert := grafanaalerts.GrafanaAlertRule{
 		Annotations:  rule.Annotations,
 		Condition:    refIdB,
-		Data:         []*grafana_alerts.GrafanaAlertQuery{&queryA, &queryB},
+		Data:         []*grafanaalerts.GrafanaAlertQuery{&queryA, &queryB},
 		FolderUID:    folderUid,
-		NoDataState:  grafana_alerts.NoDataOk,
-		ExecErrState: grafana_alerts.ErrOK,
+		NoDataState:  grafanaalerts.NoDataOk,
+		ExecErrState: grafanaalerts.ErrOK,
 		Labels:       rule.Labels,
 		OrgID:        1,
 		RuleGroup:    rule.Annotations["ruleGroupsName"],
@@ -468,12 +468,12 @@ func (l *LogzioGrafanaAlertsClient) generateGrafanaAlert(rule rulefmt.RuleNode, 
 	return grafanaAlert, nil
 }
 
-func (l *LogzioGrafanaAlertsClient) GetLogzioManagedGrafanaContactPoints() ([]grafana_contact_points.GrafanaContactPoint, error) {
+func (l *LogzioGrafanaAlertsClient) GetLogzioManagedGrafanaContactPoints() ([]grafanacontactpoints.GrafanaContactPoint, error) {
 	contactPoints, err := l.logzioContactPointClient.GetAllGrafanaContactPoints()
 	if err != nil {
 		return nil, err
 	}
-	var managedContactPoints []grafana_contact_points.GrafanaContactPoint
+	var managedContactPoints []grafanacontactpoints.GrafanaContactPoint
 	for _, contactPoint := range contactPoints {
 		// check if the contact point name contains the env id to determine if it is a managed contact point
 		if strings.Contains(contactPoint.Name, l.envId) {
@@ -483,23 +483,23 @@ func (l *LogzioGrafanaAlertsClient) GetLogzioManagedGrafanaContactPoints() ([]gr
 	return managedContactPoints, nil
 }
 
-func (l *LogzioGrafanaAlertsClient) GetLogzioGrafanaNotificationPolicies() (grafana_notification_policies.GrafanaNotificationPolicyTree, error) {
+func (l *LogzioGrafanaAlertsClient) GetLogzioGrafanaNotificationPolicies() (grafananotificationpolicies.GrafanaNotificationPolicyTree, error) {
 	notificationPolicies, err := l.logzioNotificationPolicyClient.GetGrafanaNotificationPolicyTree()
 	if err != nil {
-		return grafana_notification_policies.GrafanaNotificationPolicyTree{}, err
+		return grafananotificationpolicies.GrafanaNotificationPolicyTree{}, err
 	}
 	return notificationPolicies, nil
 
 }
 
 // GetLogzioGrafanaAlerts builds a list of rules from all logz.io
-func (l *LogzioGrafanaAlertsClient) GetLogzioGrafanaAlerts(folderUid string) ([]grafana_alerts.GrafanaAlertRule, error) {
+func (l *LogzioGrafanaAlertsClient) GetLogzioGrafanaAlerts(folderUid string) ([]grafanaalerts.GrafanaAlertRule, error) {
 	alertRules, ListLogzioRulesErr := l.logzioAlertClient.ListGrafanaAlertRules()
 	if ListLogzioRulesErr != nil {
 		return nil, ListLogzioRulesErr
 	}
 	// find all alerts inside prometheus alerts folder
-	var alertsInFolder []grafana_alerts.GrafanaAlertRule
+	var alertsInFolder []grafanaalerts.GrafanaAlertRule
 	for _, rule := range alertRules {
 		if rule.FolderUID == folderUid {
 			alertsInFolder = append(alertsInFolder, rule)
@@ -522,7 +522,7 @@ func (l *LogzioGrafanaAlertsClient) FindOrCreatePrometheusAlertsFolder() (string
 		}
 	}
 	// if not found, create the prometheus alerts folder
-	grafanaFolder, err := l.logzioFolderClient.CreateGrafanaFolder(grafana_folders.CreateUpdateFolder{
+	grafanaFolder, err := l.logzioFolderClient.CreateGrafanaFolder(grafanafolders.CreateUpdateFolder{
 		Uid:   fmt.Sprintf("%s-%s", envFolderTitle, common.GenerateRandomString(randomStringLength)),
 		Title: envFolderTitle,
 	})

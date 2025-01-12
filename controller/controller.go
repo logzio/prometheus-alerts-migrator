@@ -7,7 +7,7 @@ import (
 	"github.com/logzio/logzio_terraform_client/grafana_contact_points"
 	"github.com/logzio/prometheus-alerts-migrator/common"
 	"github.com/logzio/prometheus-alerts-migrator/logzio_alerts_client"
-	alertManagerConfig "github.com/prometheus/alertmanager/config"
+	alertmanagerconfig "github.com/prometheus/alertmanager/config"
 	"github.com/prometheus/prometheus/model/rulefmt"
 	_ "github.com/prometheus/prometheus/promql/parser"
 	"gopkg.in/yaml.v3"
@@ -275,7 +275,7 @@ func (c *Controller) processAlertManagerConfigMaps(configmap *corev1.ConfigMap) 
 		return err
 	}
 	// Creating maps for efficient lookups
-	receiversMap := make(map[string]alertManagerConfig.Receiver)
+	receiversMap := make(map[string]alertmanagerconfig.Receiver)
 	for _, receiver := range receivers {
 		receiversMap[receiver.Name] = receiver
 	}
@@ -307,15 +307,15 @@ func (c *Controller) processAlertManagerConfigMaps(configmap *corev1.ConfigMap) 
 	return nil
 }
 
-func (c *Controller) getClusterReceiversAndRoutes(configmap *corev1.ConfigMap) ([]alertManagerConfig.Receiver, *alertManagerConfig.Route, error) {
-	var receivers []alertManagerConfig.Receiver
-	var routeTree alertManagerConfig.Route
+func (c *Controller) getClusterReceiversAndRoutes(configmap *corev1.ConfigMap) ([]alertmanagerconfig.Receiver, *alertmanagerconfig.Route, error) {
+	var receivers []alertmanagerconfig.Receiver
+	var routeTree alertmanagerconfig.Route
 	if c.isAlertManagerConfigMap(configmap) {
 		for _, value := range configmap.Data {
-			config, err := alertManagerConfig.Load(value)
+			config, err := alertmanagerconfig.Load(value)
 			if err != nil {
 				utilruntime.HandleError(fmt.Errorf("unable to load alert manager config; %s", err))
-				return nil, &alertManagerConfig.Route{}, err
+				return nil, &alertmanagerconfig.Route{}, err
 			}
 			// Add prefix to distinguish between alert manager imported from alert manager and logz.io custom contact points
 			stub := common.CreateNameStub(configmap)
@@ -339,7 +339,7 @@ func (c *Controller) getClusterReceiversAndRoutes(configmap *corev1.ConfigMap) (
 }
 
 // compareContactPoints
-func (c *Controller) compareContactPoints(receiversMap map[string]alertManagerConfig.Receiver, logzioContactPoints []grafana_contact_points.GrafanaContactPoint) (contactPointsToAdd, contactPointsToUpdate []alertManagerConfig.Receiver, contactPointsToDelete []grafana_contact_points.GrafanaContactPoint) {
+func (c *Controller) compareContactPoints(receiversMap map[string]alertmanagerconfig.Receiver, logzioContactPoints []grafana_contact_points.GrafanaContactPoint) (contactPointsToAdd, contactPointsToUpdate []alertmanagerconfig.Receiver, contactPointsToDelete []grafana_contact_points.GrafanaContactPoint) {
 	// Initialize a map with slices as values for Logz.io contact points
 	existingContactPoints := make(map[string][]grafana_contact_points.GrafanaContactPoint)
 	for _, contactPoint := range logzioContactPoints {
