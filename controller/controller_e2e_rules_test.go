@@ -70,7 +70,7 @@ func cleanupLogzioAlerts(ctl Controller) {
 	if err != nil {
 		log.Fatalf("Failed to get logzio alerts: %v", err)
 	}
-	ctl.logzioGrafanaAlertsClient.DeleteRules(logzioAlerts, folderUid)
+	ctl.logzioGrafanaAlertsClient.DeleteRules(logzioAlerts)
 }
 
 // TestControllerE2E is the main function that runs the end-to-end test
