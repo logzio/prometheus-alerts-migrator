@@ -33,6 +33,14 @@ data:
       continue: false
       routes:  []
     receivers:
+      - name: ms-teams-alerts
+        msteams_configs:
+          - send_resolved: false
+            webhook_url: https://api.webhook.com/
+            title: '{{ template "msteams.default.title" . }}'
+            summary: '{{ template "msteams.default.summary" . }}'
+            text: '{{ template "msteams.default.text" . }}'
+    
       - name: lost-alerts-slack
         slack_configs:
           - send_resolved: true

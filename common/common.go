@@ -26,6 +26,7 @@ const (
 	TypeSlack     = "slack"
 	TypeEmail     = "email"
 	TypePagerDuty = "pagerduty" // # of letter indices fitting in 63 bits
+	TypeMsTeams   = "teams"
 )
 
 var (
