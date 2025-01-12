@@ -412,7 +412,7 @@ func (c *Controller) processAlertRules(rulesMap map[string]rulefmt.RuleNode, log
 		c.logzioGrafanaAlertsClient.UpdateRules(rulesToUpdate, logzioRulesMap, folderUid)
 	}
 	if len(rulesToDelete) > 0 {
-		c.logzioGrafanaAlertsClient.DeleteRules(rulesToDelete, folderUid)
+		c.logzioGrafanaAlertsClient.DeleteRules(rulesToDelete)
 	}
 }
 

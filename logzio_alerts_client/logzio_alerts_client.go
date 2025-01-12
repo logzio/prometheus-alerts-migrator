@@ -350,7 +350,7 @@ func (l *LogzioGrafanaAlertsClient) generateGrafanaContactPoint(receiver alertma
 }
 
 // DeleteRules deletes the rules from logz.io
-func (l *LogzioGrafanaAlertsClient) DeleteRules(rulesToDelete []grafanaalerts.GrafanaAlertRule, folderUid string) {
+func (l *LogzioGrafanaAlertsClient) DeleteRules(rulesToDelete []grafanaalerts.GrafanaAlertRule) {
 	for _, rule := range rulesToDelete {
 		err := l.logzioAlertClient.DeleteGrafanaAlertRule(rule.Uid)
 		if err != nil {
