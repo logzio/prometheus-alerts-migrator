@@ -9,7 +9,7 @@ import (
 	"github.com/logzio/logzio_terraform_client/grafana_folders"
 	"github.com/logzio/logzio_terraform_client/grafana_notification_policies"
 	"github.com/logzio/prometheus-alerts-migrator/common"
-	alert_manager_config "github.com/prometheus/alertmanager/config"
+	alertManagerConfig "github.com/prometheus/alertmanager/config"
 	"github.com/prometheus/prometheus/model/rulefmt"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/klog/v2"
@@ -63,7 +63,7 @@ func (p PrometheusQueryModel) ToJSON() (json.RawMessage, error) {
 }
 
 type LogzioGrafanaAlertsClient struct {
-	AlertManagerGlobalConfig       *alert_manager_config.GlobalConfig
+	AlertManagerGlobalConfig       *alertManagerConfig.GlobalConfig
 	logzioAlertClient              *grafana_alerts.GrafanaAlertClient
 	logzioFolderClient             *grafana_folders.GrafanaFolderClient
 	logzioDataSourceClient         *grafana_datasources.GrafanaDatasourceClient
@@ -137,7 +137,7 @@ func (l *LogzioGrafanaAlertsClient) ResetNotificationPolicyTree() error {
 }
 
 // SetNotificationPolicyTreeFromRouteTree converts route tree to grafana notification policy tree and writes it to logz.io
-func (l *LogzioGrafanaAlertsClient) SetNotificationPolicyTreeFromRouteTree(routeTree *alert_manager_config.Route) {
+func (l *LogzioGrafanaAlertsClient) SetNotificationPolicyTreeFromRouteTree(routeTree *alertManagerConfig.Route) {
 	// getting logzio contact points to ensure it exists for the notification policy tree
 	logzioContactPoints, err := l.GetLogzioManagedGrafanaContactPoints()
 	if err != nil {
@@ -156,7 +156,7 @@ func (l *LogzioGrafanaAlertsClient) SetNotificationPolicyTreeFromRouteTree(route
 	}
 }
 
-func (l *LogzioGrafanaAlertsClient) convertRouteTreeToNotificationPolicyTree(routeTree *alert_manager_config.Route, existingContactPoints map[string]bool) (notificationPolicyTree grafana_notification_policies.GrafanaNotificationPolicyTree) {
+func (l *LogzioGrafanaAlertsClient) convertRouteTreeToNotificationPolicyTree(routeTree *alertManagerConfig.Route, existingContactPoints map[string]bool) (notificationPolicyTree grafana_notification_policies.GrafanaNotificationPolicyTree) {
 	// checking for empty values to avoid nil pointer errors
 	if routeTree.GroupByStr != nil {
 		notificationPolicyTree.GroupBy = routeTree.GroupByStr
@@ -181,8 +181,8 @@ func (l *LogzioGrafanaAlertsClient) convertRouteTreeToNotificationPolicyTree(rou
 	return notificationPolicyTree
 }
 
-// generateGrafanaNotificationPolicy generates a GrafanaNotificationPolicy from a alert_manager_config.Route
-func (l *LogzioGrafanaAlertsClient) generateGrafanaNotificationPolicy(route *alert_manager_config.Route) (notificationPolicy grafana_notification_policies.GrafanaNotificationPolicy) {
+// generateGrafanaNotificationPolicy generates a GrafanaNotificationPolicy from a alertManagerConfig.Route
+func (l *LogzioGrafanaAlertsClient) generateGrafanaNotificationPolicy(route *alertManagerConfig.Route) (notificationPolicy grafana_notification_policies.GrafanaNotificationPolicy) {
 	// checking for empty values to avoid nil pointer errors
 	if route.GroupInterval != nil {
 		notificationPolicy.GroupInterval = route.GroupInterval.String()
@@ -231,7 +231,7 @@ func (l *LogzioGrafanaAlertsClient) generateGrafanaNotificationPolicy(route *ale
 }
 
 // WriteContactPoints writes the contact points to logz.io
-func (l *LogzioGrafanaAlertsClient) WriteContactPoints(contactPointsToWrite []alert_manager_config.Receiver) {
+func (l *LogzioGrafanaAlertsClient) WriteContactPoints(contactPointsToWrite []alertManagerConfig.Receiver) {
 	for _, contactPoint := range contactPointsToWrite {
 		contactPointsList := l.generateGrafanaContactPoint(contactPoint)
 		for _, cp := range contactPointsList {
@@ -254,7 +254,7 @@ func (l *LogzioGrafanaAlertsClient) DeleteContactPoints(contactPointsToDelete []
 }
 
 // UpdateContactPoints updates the contact points in logz.io
-func (l *LogzioGrafanaAlertsClient) UpdateContactPoints(contactPointsToUpdate []alert_manager_config.Receiver, contactPointsMap []grafana_contact_points.GrafanaContactPoint) {
+func (l *LogzioGrafanaAlertsClient) UpdateContactPoints(contactPointsToUpdate []alertManagerConfig.Receiver, contactPointsMap []grafana_contact_points.GrafanaContactPoint) {
 	for _, contactPoint := range contactPointsToUpdate {
 		contactPointsList := l.generateGrafanaContactPoint(contactPoint)
 		for _, cp := range contactPointsList {
@@ -271,8 +271,8 @@ func (l *LogzioGrafanaAlertsClient) UpdateContactPoints(contactPointsToUpdate []
 	}
 }
 
-// generateGrafanaContactPoint generates a GrafanaContactPoint from a alert_manager_config.Receiver
-func (l *LogzioGrafanaAlertsClient) generateGrafanaContactPoint(receiver alert_manager_config.Receiver) (contactPointsList []grafana_contact_points.GrafanaContactPoint) {
+// generateGrafanaContactPoint generates a GrafanaContactPoint from a alertManagerConfig.Receiver
+func (l *LogzioGrafanaAlertsClient) generateGrafanaContactPoint(receiver alertManagerConfig.Receiver) (contactPointsList []grafana_contact_points.GrafanaContactPoint) {
 	// check for email type configs
 	for _, emailConfig := range receiver.EmailConfigs {
 		contactPoint := grafana_contact_points.GrafanaContactPoint{
