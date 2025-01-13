@@ -12,6 +12,7 @@ Before running this software, ensure you have:
 - `Email`
 - `Slack`
 - `Pagerduty`
+- `MS Teams`
 
 More types will be supported in the future, If you have a specific request please post an issue with your request
 
@@ -167,6 +168,16 @@ data:
 
 
 ## Changelog
+- v1.2.0
+  - Add support for MS Teams contact points
+  - Update dependencies:
+    - `prometheus/common`: `v0.60.1` -> `v0.61.0`
+    - `prometheus/prometheus`: `v0.55.0` -> `v0.301.0`
+    - `k8s.io/api`: `v0.31.2` -> `v0.32.0`
+    - `k8s.io/apimachinery`: `v0.31.2` -> `v0.32.0`
+    - `k8s.io/client-go`: `v0.31.2` -> `v0.32.0`
+  - Improve error handling In event handler creation
+  - Refactor import alias names to lowercase
 - v1.1.0
   - Add support for migrating alert rules groups
   - Upgrade GoLang version to 1.23
