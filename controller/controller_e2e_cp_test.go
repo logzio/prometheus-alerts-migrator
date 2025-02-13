@@ -65,6 +65,6 @@ func TestControllerContactPointsE2E(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to get logzio contact points: %v", err)
 	}
-	assert.Equal(t, 14, len(logzioContactPoints))
+	assert.Equal(t, 15, len(logzioContactPoints))
 
 }

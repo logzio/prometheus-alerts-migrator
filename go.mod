@@ -4,7 +4,7 @@ go 1.23.0
 
 require (
 	github.com/logzio/logzio_terraform_client v1.22.0
-	github.com/prometheus/alertmanager v0.27.0
+	github.com/prometheus/alertmanager v0.28.0
 	github.com/prometheus/common v0.61.0
 	github.com/prometheus/prometheus v0.301.0
 	github.com/stretchr/testify v1.10.0
@@ -32,7 +32,7 @@ require (
 	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-openapi/jsonpointer v0.21.0 // indirect
-	github.com/go-openapi/jsonreference v0.20.4 // indirect
+	github.com/go-openapi/jsonreference v0.21.0 // indirect
 	github.com/go-openapi/swag v0.23.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
