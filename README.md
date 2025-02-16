@@ -168,6 +168,9 @@ data:
 
 
 ## Changelog
+- v1.2.1
+  - Add support for MS Teams v2 contact points
+  - Update `prometheus/alertmanager`: `v0.27.0` -> `v0.28.0`
 - v1.2.0
   - Add support for MS Teams contact points
   - Update dependencies:

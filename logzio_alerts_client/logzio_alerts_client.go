@@ -346,6 +346,20 @@ func (l *LogzioGrafanaAlertsClient) generateGrafanaContactPoint(receiver alertma
 		}
 		contactPointsList = append(contactPointsList, contactPoint)
 	}
+
+	for _, msTeamsWorkflowsConfig := range receiver.MSTeamsV2Configs {
+		contactPoint := grafanacontactpoints.GrafanaContactPoint{
+			Name:                  receiver.Name,
+			Type:                  common.TypeMsTeamsV2,
+			Uid:                   common.GenerateRandomString(9),
+			DisableResolveMessage: false,
+			Settings: map[string]interface{}{
+				"url":     msTeamsWorkflowsConfig.WebhookURL.URL.String(),
+				"message": msTeamsWorkflowsConfig.Text,
+			},
+		}
+		contactPointsList = append(contactPointsList, contactPoint)
+	}
 	return contactPointsList
 }
 

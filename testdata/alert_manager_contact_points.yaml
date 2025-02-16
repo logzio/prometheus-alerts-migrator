@@ -40,7 +40,14 @@ data:
             title: '{{ template "msteams.default.title" . }}'
             summary: '{{ template "msteams.default.summary" . }}'
             text: '{{ template "msteams.default.text" . }}'
-    
+
+      - name: ms-teams-v2-alerts
+        msteamsv2_configs:
+          - send_resolved: false
+            webhook_url: https://api.webhook.com/
+            title: '{{ template "msteams.default.title" . }}'
+            text: '{{ template "msteams.default.text" . }}'
+
       - name: lost-alerts-slack
         slack_configs:
           - send_resolved: true

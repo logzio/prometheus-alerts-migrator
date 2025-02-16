@@ -27,6 +27,7 @@ const (
 	TypeEmail     = "email"
 	TypePagerDuty = "pagerduty" // # of letter indices fitting in 63 bits
 	TypeMsTeams   = "teams"
+	TypeMsTeamsV2 = "teams_workflows" // should be changed to msteamsv2_configs once logzio upgrades to alert manager 0.28.0
 )
 
 var (
