@@ -7,7 +7,7 @@ import (
 	"github.com/logzio/logzio_terraform_client/grafana_contact_points"
 	"github.com/logzio/prometheus-alerts-migrator/common"
 	"github.com/logzio/prometheus-alerts-migrator/logzio_alerts_client"
-	alert_manager_config "github.com/prometheus/alertmanager/config"
+	alertmanagerconfig "github.com/prometheus/alertmanager/config"
 	"github.com/prometheus/prometheus/model/rulefmt"
 	_ "github.com/prometheus/prometheus/promql/parser"
 	"gopkg.in/yaml.v3"
@@ -61,10 +61,7 @@ type Controller struct {
 	alertManagerAnnotation *string
 
 	configmapEventRecorderFunc func(cm *corev1.ConfigMap, eventtype, reason, msg string)
-}
-
-type MultiRuleGroups struct {
-	Values []rulefmt.RuleGroups
+	ruleGroupsName             string
 }
 
 func NewController(
@@ -100,7 +97,7 @@ func NewController(
 
 	controller.configmapEventRecorderFunc = controller.recordEventOnConfigMap
 	klog.Info("Setting up event handlers")
-	configmapInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+	_, err := configmapInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: controller.enqueueConfigMap,
 		UpdateFunc: func(old, new interface{}) {
 			newCM := new.(*corev1.ConfigMap)
@@ -112,6 +109,10 @@ func NewController(
 		},
 		DeleteFunc: controller.enqueueConfigMap,
 	})
+	if err != nil {
+		klog.Errorf("Failed to set up event handlers: %v", err)
+		return nil
+	}
 
 	return controller
 }
@@ -278,7 +279,7 @@ func (c *Controller) processAlertManagerConfigMaps(configmap *corev1.ConfigMap) 
 		return err
 	}
 	// Creating maps for efficient lookups
-	receiversMap := make(map[string]alert_manager_config.Receiver)
+	receiversMap := make(map[string]alertmanagerconfig.Receiver)
 	for _, receiver := range receivers {
 		receiversMap[receiver.Name] = receiver
 	}
@@ -310,31 +311,31 @@ func (c *Controller) processAlertManagerConfigMaps(configmap *corev1.ConfigMap) 
 	return nil
 }
 
-func (c *Controller) getClusterReceiversAndRoutes(configmap *corev1.ConfigMap) ([]alert_manager_config.Receiver, *alert_manager_config.Route, error) {
-	var receivers []alert_manager_config.Receiver
-	var routeTree alert_manager_config.Route
+func (c *Controller) getClusterReceiversAndRoutes(configmap *corev1.ConfigMap) ([]alertmanagerconfig.Receiver, *alertmanagerconfig.Route, error) {
+	var receivers []alertmanagerconfig.Receiver
+	var routeTree alertmanagerconfig.Route
 	if c.isAlertManagerConfigMap(configmap) {
 		for _, value := range configmap.Data {
-			alertManagerConfig, err := alert_manager_config.Load(value)
+			config, err := alertmanagerconfig.Load(value)
 			if err != nil {
 				utilruntime.HandleError(fmt.Errorf("unable to load alert manager config; %s", err))
-				return nil, &alert_manager_config.Route{}, err
+				return nil, &alertmanagerconfig.Route{}, err
 			}
 			// Add prefix to distinguish between alert manager imported from alert manager and logz.io custom contact points
 			stub := common.CreateNameStub(configmap)
-			for _, receiver := range alertManagerConfig.Receivers {
+			for _, receiver := range config.Receivers {
 				receiver.Name = fmt.Sprintf("%s-%s-%s", c.envId, stub, receiver.Name)
 				receivers = append(receivers, receiver)
 
 			}
 			// Add prefix to routes to match with contact points
-			routeTree = *alertManagerConfig.Route
+			routeTree = *config.Route
 			routeTree.Receiver = fmt.Sprintf("%s-%s-%s", c.envId, stub, routeTree.Receiver)
 			for _, route := range routeTree.Routes {
 				route.Receiver = fmt.Sprintf("%s-%s-%s", c.envId, stub, route.Receiver)
 			}
 			// setting the `AlertManagerGlobalConfig` context for logzio grafana alerts client
-			c.logzioGrafanaAlertsClient.AlertManagerGlobalConfig = alertManagerConfig.Global
+			c.logzioGrafanaAlertsClient.AlertManagerGlobalConfig = config.Global
 		}
 	}
 	klog.Infof("Found %d receivers and %d routes, in %s", len(receivers), len(routeTree.Routes), configmap.Name)
@@ -342,7 +343,7 @@ func (c *Controller) getClusterReceiversAndRoutes(configmap *corev1.ConfigMap) (
 }
 
 // compareContactPoints
-func (c *Controller) compareContactPoints(receiversMap map[string]alert_manager_config.Receiver, logzioContactPoints []grafana_contact_points.GrafanaContactPoint) (contactPointsToAdd, contactPointsToUpdate []alert_manager_config.Receiver, contactPointsToDelete []grafana_contact_points.GrafanaContactPoint) {
+func (c *Controller) compareContactPoints(receiversMap map[string]alertmanagerconfig.Receiver, logzioContactPoints []grafana_contact_points.GrafanaContactPoint) (contactPointsToAdd, contactPointsToUpdate []alertmanagerconfig.Receiver, contactPointsToDelete []grafana_contact_points.GrafanaContactPoint) {
 	// Initialize a map with slices as values for Logz.io contact points
 	existingContactPoints := make(map[string][]grafana_contact_points.GrafanaContactPoint)
 	for _, contactPoint := range logzioContactPoints {
@@ -411,7 +412,7 @@ func (c *Controller) processAlertRules(rulesMap map[string]rulefmt.RuleNode, log
 		c.logzioGrafanaAlertsClient.UpdateRules(rulesToUpdate, logzioRulesMap, folderUid)
 	}
 	if len(rulesToDelete) > 0 {
-		c.logzioGrafanaAlertsClient.DeleteRules(rulesToDelete, folderUid)
+		c.logzioGrafanaAlertsClient.DeleteRules(rulesToDelete)
 	}
 }
 
@@ -430,49 +431,77 @@ func (c *Controller) getClusterAlertRules(mapList *corev1.ConfigMapList) *[]rule
 	return &finalRules
 }
 
+// validateAndRecordRule validates a single rule, records events, and appends valid rules to finalRules.
+func (c *Controller) validateAndRecordRule(rule rulefmt.RuleNode, cm *corev1.ConfigMap, fallbackNameStub, key string, finalRules *[]rulefmt.RuleNode) {
+	if len(rule.Expr.Value) == 0 {
+		klog.Warningf("0:0: field 'expr' must be set in rule")
+	}
+	if len(rule.Alert.Value) == 0 {
+		errorMsg := fmt.Sprintf("Configmap: %s key: %s does not conform to any of the legal format.", fallbackNameStub, key)
+		c.configmapEventRecorderFunc(cm, corev1.EventTypeWarning, ErrInvalidKey, errorMsg)
+	}
+	// Add unique name for the alert rule to prevent duplicate rules ([alert_name]-[configmap_name]-[configmap_namespace])
+	rule.Alert.Value = fmt.Sprintf("%s-%s-%s", cm.Name, cm.Namespace, key)
+
+	validationErrs := rule.Validate()
+	if len(validationErrs) > 0 {
+		for _, ruleErr := range validationErrs {
+			c.configmapEventRecorderFunc(cm, corev1.EventTypeWarning, ErrInvalidKey, ruleErr.Error())
+		}
+		failMessage := fmt.Sprintf("Configmap: %s key: %s Rejected, no valid rules.", fallbackNameStub, key)
+		c.configmapEventRecorderFunc(cm, corev1.EventTypeWarning, ErrInvalidKey, failMessage)
+	} else {
+		if rule.Annotations == nil {
+			rule.Annotations = make(map[string]string)
+		}
+
+		if (rule.Annotations["ruleGroupsName"] == rule.Alert.Value || rule.Annotations["ruleGroupsName"] == "") && c.ruleGroupsName != "" {
+			rule.Annotations["ruleGroupsName"] = c.ruleGroupsName
+		} else {
+			rule.Annotations["ruleGroupsName"] = rule.Alert.Value
+		}
+		*finalRules = append(*finalRules, rule)
+	}
+}
+
 // extractValues extracts the rules from the configmap, and validates them
-func (c *Controller) extractValues(cm *corev1.ConfigMap) []rulefmt.RuleNode {
+func (c *Controller) extractValues(cm *corev1.ConfigMap) (totalRules []rulefmt.RuleNode) {
 
 	fallbackNameStub := common.CreateNameStub(cm)
+	configmapData := cm.Data
 
-	var toalRules []rulefmt.RuleNode
-
-	for key, value := range cm.Data {
-		// try each encoding
-		// try to extract a rules
-		var rule rulefmt.RuleNode
-		var err error
-		err, rule = c.extractRules(value)
-		if err != nil {
-			errorMsg := fmt.Sprintf("Configmap: %s key: %s Error during extraction.", fallbackNameStub, key)
-			c.configmapEventRecorderFunc(cm, corev1.EventTypeWarning, ErrInvalidKey, errorMsg)
-		}
-
-		// Add unique name for the alert rule to prevent duplicate rules ([alert_name]-[configmap_name]-[configmap_namespace])
-		rule.Alert.Value = fmt.Sprintf("%s-%s-%s", cm.Name, cm.Namespace, key)
-
-		if len(rule.Alert.Value) == 0 {
-			errorMsg := fmt.Sprintf("Configmap: %s key: %s does not conform to any of the legal format Skipping.", fallbackNameStub, key)
-			c.configmapEventRecorderFunc(cm, corev1.EventTypeWarning, ErrInvalidKey, errorMsg)
-		} else {
-			// validate the rule
-			validationErrs := rule.Validate()
-			if len(validationErrs) > 0 {
-				for _, ruleErr := range validationErrs {
-					c.configmapEventRecorderFunc(cm, corev1.EventTypeWarning, ErrInvalidKey, ruleErr.Error())
+	for key, value := range configmapData {
+		// Check if the rule contains groups
+		var ruleGroups rulefmt.RuleGroups
+		err := yaml.Unmarshal([]byte(value), &ruleGroups)
+		if err == nil && len(ruleGroups.Groups) > 0 {
+			// Process rule groups and rules
+			for _, ruleGroup := range ruleGroups.Groups {
+				c.ruleGroupsName = ruleGroup.Name
+				for _, rule := range ruleGroup.Rules {
+					c.validateAndRecordRule(rule, cm, fallbackNameStub, key, &totalRules)
 				}
-				failMessage := fmt.Sprintf("Configmap: %s key: %s Rejected, no valid rules.", fallbackNameStub, key)
-				c.configmapEventRecorderFunc(cm, corev1.EventTypeWarning, ErrInvalidKey, failMessage)
-
-			} else {
-				// add to the rulegroups
-				toalRules = append(toalRules, rule)
 			}
+			continue
 		}
-	}
-	klog.Info(fmt.Sprintf("Found %d rules in %s configmap", len(toalRules), cm.Name))
 
-	return toalRules
+		// Process single rules
+		var rule rulefmt.RuleNode
+		err = yaml.Unmarshal([]byte(value), &rule)
+		if err != nil {
+			errorMsg := fmt.Sprintf("Configmap: %s key: %s Error during extraction: %s.", fallbackNameStub, key, err)
+			c.configmapEventRecorderFunc(cm, corev1.EventTypeWarning, ErrInvalidKey, errorMsg)
+			continue
+		}
+
+		c.validateAndRecordRule(rule, cm, fallbackNameStub, key, &totalRules)
+	}
+
+	if len(totalRules) > 0 {
+		klog.Info(fmt.Sprintf("Found %d alert rules in %s configmap", len(totalRules), cm.Name))
+	}
+
+	return totalRules
 }
 
 // extractRules extracts the rules from the configmap key
@@ -481,9 +510,6 @@ func (c *Controller) extractRules(value string) (error, rulefmt.RuleNode) {
 	err := yaml.Unmarshal([]byte(value), &rule)
 	if err != nil {
 		return err, rulefmt.RuleNode{}
-	}
-	if len(rule.Alert.Value) == 0 {
-		return fmt.Errorf("no Rules found"), rule
 	}
 	return nil, rule
 }
