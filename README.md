@@ -170,7 +170,7 @@ data:
 ## Changelog
 - v1.3.0
   - Upgrade to Grafana 10 API
-    - Remove support for `MSTeamsConfigs` (`msteams_configs`) due to Grafana 10 deprecation.
+    - Remove support for `MSTeamsConfigs` (`msteams_configs`) due to deprecation in Grafana 10.
   - Upgrade GoLang version to 1.24
   - Upgrade dependencies
     - `logzio_terraform_client`: `1.22.0` -> `v1.23.2`
