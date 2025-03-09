@@ -333,7 +333,7 @@ func (l *LogzioGrafanaAlertsClient) generateGrafanaContactPoint(receiver alertma
 		contactPointsList = append(contactPointsList, contactPoint)
 	}
 	// check for MS Teams type configs
-	for _, msTeamsConfig := range receiver.MSTeamsConfigs {
+	for _, msTeamsConfig := range receiver.MSTeamsV2Configs {
 		contactPoint := grafanacontactpoints.GrafanaContactPoint{
 			Name:                  receiver.Name,
 			Type:                  common.TypeMsTeams,
@@ -347,19 +347,6 @@ func (l *LogzioGrafanaAlertsClient) generateGrafanaContactPoint(receiver alertma
 		contactPointsList = append(contactPointsList, contactPoint)
 	}
 
-	for _, msTeamsWorkflowsConfig := range receiver.MSTeamsV2Configs {
-		contactPoint := grafanacontactpoints.GrafanaContactPoint{
-			Name:                  receiver.Name,
-			Type:                  common.TypeMsTeamsV2,
-			Uid:                   common.GenerateRandomString(9),
-			DisableResolveMessage: false,
-			Settings: map[string]interface{}{
-				"url":     msTeamsWorkflowsConfig.WebhookURL.URL.String(),
-				"message": msTeamsWorkflowsConfig.Text,
-			},
-		}
-		contactPointsList = append(contactPointsList, contactPoint)
-	}
 	return contactPointsList
 }
 
@@ -460,10 +447,6 @@ func (l *LogzioGrafanaAlertsClient) generateGrafanaAlert(rule rulefmt.RuleNode, 
 			To:   0,
 		},
 	}
-	duration, err := common.ParseDuration(rule.For.String())
-	if err != nil {
-		return grafanaalerts.GrafanaAlertRule{}, err
-	}
 
 	// Create the GrafanaAlertRule, we are alerting on the reduced last value of the time series data (query B).
 	grafanaAlert := grafanaalerts.GrafanaAlertRule{
@@ -477,7 +460,7 @@ func (l *LogzioGrafanaAlertsClient) generateGrafanaAlert(rule rulefmt.RuleNode, 
 		OrgID:        1,
 		RuleGroup:    rule.Annotations["ruleGroupsName"],
 		Title:        rule.Alert.Value,
-		For:          duration,
+		For:          rule.For.String(),
 	}
 	return grafanaAlert, nil
 }

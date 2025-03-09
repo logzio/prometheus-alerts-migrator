@@ -19,7 +19,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: '1.23'
+          go-version: '1.24'
 
       - name: Check out code into the Go module directory
         uses: actions/checkout@v4
@@ -47,5 +47,3 @@ jobs:
 
       - name: Extract coverage percentage
         run: go tool cover -func=coverage.out | grep total | awk '{print $3}'
-
-

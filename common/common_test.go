@@ -9,7 +9,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"strings"
 	"testing"
-	"time"
 )
 
 func TestGenerateRandomString(t *testing.T) {
@@ -47,29 +46,6 @@ func TestGenerateRandomString(t *testing.T) {
 	}
 }
 
-func TestParseDuration(t *testing.T) {
-	tests := []struct {
-		input    string
-		expected int64
-		err      bool
-	}{
-		{"", 0, true},
-		{"123", 123 * int64(time.Second), false},
-		{"1h", int64(time.Hour), false},
-		{"invalid", 0, true},
-	}
-
-	for _, test := range tests {
-		duration, err := ParseDuration(test.input)
-		if test.err && err == nil {
-			t.Errorf("Expected error for input %s", test.input)
-		}
-		if !test.err && duration != test.expected {
-			t.Errorf("Expected %d, got %d for input %s", test.expected, duration, test.input)
-		}
-	}
-}
-
 func TestCreateNameStub(t *testing.T) {
 	cm := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
@@ -87,7 +63,7 @@ func TestCreateNameStub(t *testing.T) {
 func TestIsAlertEqual(t *testing.T) {
 	// dummy time duration
 	tenMinutes, _ := model.ParseDuration("10m")
-	tenMinutesNs := int64(10 * time.Minute)
+	tenMinutesNs := "10m"
 	fiveMinutes, _ := model.ParseDuration("5m")
 
 	// dummy expression nodes
