@@ -432,6 +432,7 @@ func TestCompareAlertRules(t *testing.T) {
 				"rule1": {
 					Title: "rule1",
 					Data:  data,
+					For:   "0s",
 				},
 			},
 			expectedToAddLen:    0,
