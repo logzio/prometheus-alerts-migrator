@@ -27,7 +27,6 @@ const (
 	TypeEmail     = "email"
 	TypePagerDuty = "pagerduty" // # of letter indices fitting in 63 bits
 	TypeMsTeams   = "teams"
-	TypeMsTeamsV2 = "teams_workflows" // should be changed to msteamsv2_configs once logzio upgrades to alert manager 0.28.0
 )
 
 var (
@@ -162,29 +161,6 @@ func GenerateRandomString(n int) string {
 	return string(b)
 }
 
-// ParseDuration turns a duration string (example: 5m, 1h) into an int64 value
-func ParseDuration(durationStr string) (int64, error) {
-	// Check if the string is empty
-	if durationStr == "" {
-		return 0, fmt.Errorf("duration string is empty")
-	}
-
-	// Handle the special case where the duration string is just a number (assumed to be seconds)
-	if _, err := strconv.Atoi(durationStr); err == nil {
-		seconds, _ := strconv.ParseInt(durationStr, 10, 64)
-		return seconds * int64(time.Second), nil
-	}
-
-	// Parse the duration string
-	duration, err := time.ParseDuration(durationStr)
-	if err != nil {
-		return 0, err
-	}
-
-	// Convert the time.Duration value to an int64
-	return int64(duration), nil
-}
-
 func CreateNameStub(cm *corev1.ConfigMap) string {
 	name := cm.GetObjectMeta().GetName()
 	namespace := cm.GetObjectMeta().GetNamespace()
@@ -204,8 +180,7 @@ func IsAlertEqual(rule rulefmt.RuleNode, grafanaRule grafanaalerts.GrafanaAlertR
 	if !reflect.DeepEqual(rule.Annotations, grafanaRule.Annotations) {
 		return false
 	}
-	forAtt, _ := ParseDuration(rule.For.String())
-	if forAtt != grafanaRule.For {
+	if rule.For.String() != grafanaRule.For {
 		return false
 	}
 	if rule.Expr.Value != grafanaRule.Data[0].Model.(map[string]interface{})["expr"] {

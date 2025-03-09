@@ -151,7 +151,7 @@ func TestGenerateGrafanaContactPoint(t *testing.T) {
 		{
 			name: "Microsoft Teams Configuration",
 			receiver: config.Receiver{
-				MSTeamsConfigs: []*config.MSTeamsConfig{
+				MSTeamsV2Configs: []*config.MSTeamsV2Config{
 					{
 						WebhookURL: &config.SecretURL{
 							URL: &url.URL{
