@@ -1,5 +1,5 @@
 IMAGE_NAME := prometheus-alerts-migrator
-IMAGE_TAG ?= v1.2.0
+IMAGE_TAG ?= v1.3.0
 DOCKER_REPO := logzio/$(IMAGE_NAME):$(IMAGE_TAG)
 
 
