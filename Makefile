@@ -6,7 +6,7 @@ DOCKER_REPO := logzio/$(IMAGE_NAME):$(IMAGE_TAG)
 .PHONY: docker-buildx
 docker-buildx:
 	docker buildx create --use
-	docker buildx build --platform linux/amd64,linux/arm64 -t $(DOCKER_REPO) --push .
+	docker buildx build --platform linux/amd64,linux/arm64 -t $(DOCKER_REPO) --provenance=true --sbom=true --push .
 
 .PHONY: run-local
 run-local:
