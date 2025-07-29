@@ -25,6 +25,7 @@ const (
 	alertFolder            = "prometheus-alerts"
 	randomStringLength     = 5
 	grafanaDefaultReceiver = "default-email"
+	maxFolderNameLength    = 40
 )
 
 // ReduceQueryModel represents a reduce query for time series data
@@ -519,9 +520,21 @@ func (l *LogzioGrafanaAlertsClient) FindOrCreatePrometheusAlertsFolder() (string
 		}
 	}
 	// if not found, create the prometheus alerts folder
+	return l.generateGrafanaFolder(envFolderTitle)
+}
+
+// generateGrafanaFolder creates a Grafana folder with a unique UID based on the provided title.
+func (l *LogzioGrafanaAlertsClient) generateGrafanaFolder(folderTitle string) (string, error) {
+	maxTitleNameInId := maxFolderNameLength - (randomStringLength + 1) // +1 for the hyphen
+	// actually-  I want to cut the NAME and keep the random UID to prevent avalanche issue
+	if len(folderTitle) > maxTitleNameInId {
+		folderTitle = folderTitle[:maxTitleNameInId]
+	}
+	uid := fmt.Sprintf("%s-%s", folderTitle, common.GenerateRandomString(randomStringLength))
+
 	grafanaFolder, err := l.logzioFolderClient.CreateGrafanaFolder(grafanafolders.CreateUpdateFolder{
-		Uid:   fmt.Sprintf("%s-%s", envFolderTitle, common.GenerateRandomString(randomStringLength)),
-		Title: envFolderTitle,
+		Uid:   uid,
+		Title: folderTitle,
 	})
 	if err != nil {
 		return "", err
