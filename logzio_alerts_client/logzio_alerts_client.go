@@ -526,7 +526,6 @@ func (l *LogzioGrafanaAlertsClient) FindOrCreatePrometheusAlertsFolder() (string
 // generateGrafanaFolder creates a Grafana folder with a unique UID based on the provided title.
 func (l *LogzioGrafanaAlertsClient) generateGrafanaFolder(folderTitle string) (string, error) {
 	maxTitleNameInId := maxFolderNameLength - (randomStringLength + 1) // +1 for the hyphen
-	// actually-  I want to cut the NAME and keep the random UID to prevent avalanche issue
 	if len(folderTitle) > maxTitleNameInId {
 		folderTitle = folderTitle[:maxTitleNameInId]
 	}
