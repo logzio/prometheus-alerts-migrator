@@ -170,12 +170,6 @@ data:
 ## Changelog
 - v1.3.1
   - Enforce a 40-character limit on the auto-generated Grafana folder UIDs to prevent runtime exceptions when the generated UID is too long.
-  - Upgrade dependencies
-    - `prometheus/common`: `v0.62.0` -> `v0.65.0`
-    - `prometheus/prometheus`: `v0.302.1` -> `v0.305.0`
-    - `k8s.io/api`: `v0.32.2` -> `v0.33.3`
-    - `k8s.io/apimachinery`: `v0.32.2` -> `v0.33.3`
-    - `k8s.io/client-go`: `v0.32.2` -> `v0.33.3`
 - v1.3.0
   - Upgrade to Grafana 10 API
     - Remove support for `MSTeamsConfigs` (`msteams_configs`) due to deprecation in Grafana 10.
