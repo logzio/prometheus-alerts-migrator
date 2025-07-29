@@ -221,9 +221,9 @@ func TestGenerateGrafanaFolder(t *testing.T) {
 				assert.EqualError(t, err, tc.expectedError.Error(), "Unexpected error message")
 				return
 			} else {
-				assert.NoError(t, err, "Unexpected error generating grafana folder")
-				assert.Len(t, folderUid, tc.expectedLength, "Incorrect number of folders generated")
-				assert.True(t, strings.HasPrefix(folderUid, tc.expectedUidPrefix), "Incorrect folder name")
+				assert.NoError(t, err, "Unexpected error generating grafana folder: %v", err)
+				assert.Len(t, folderUid, tc.expectedLength, "Folder UID length mismatch, expected %d, got %v", tc.expectedLength, folderUid)
+				assert.True(t, strings.HasPrefix(folderUid, tc.expectedUidPrefix), "Incorrect folder name, expected prefix %s, got %s", tc.expectedUidPrefix, folderUid)
 			}
 		})
 	}
