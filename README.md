@@ -168,6 +168,8 @@ data:
 
 
 ## Changelog
+- v1.3.1
+  - Enforce a 40-character limit on the auto-generated Grafana folder UIDs to prevent runtime exceptions when the generated UID is too long.
 - v1.3.0
   - Upgrade to Grafana 10 API
     - Remove support for `MSTeamsConfigs` (`msteams_configs`) due to deprecation in Grafana 10.

@@ -1,6 +1,7 @@
 package logzio_alerts_client
 
 import (
+	"fmt"
 	"github.com/logzio/prometheus-alerts-migrator/common"
 	"github.com/prometheus/alertmanager/config"
 	"github.com/prometheus/common/model"
@@ -9,6 +10,7 @@ import (
 	"gopkg.in/yaml.v3"
 	"net/url"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -176,6 +178,53 @@ func TestGenerateGrafanaContactPoint(t *testing.T) {
 			if tc.expectedLength > 0 {
 				assert.Equal(t, tc.expectedType, contactPoints[0].Type, "Incorrect type of contact point")
 				// Add more assertions to check other fields like settings, name, etc.
+			}
+		})
+	}
+}
+
+func TestGenerateGrafanaFolder(t *testing.T) {
+	client := generateTestLogzioGrafanaAlertsClient()
+	testCases := []struct {
+		name              string
+		folderName        string
+		expectedLength    int
+		expectedUidPrefix string
+		expectedError     error
+	}{
+		{
+			name:              "Valid folder name",
+			folderName:        "TestFolder",
+			expectedLength:    16,
+			expectedUidPrefix: "TestFolder",
+			expectedError:     nil,
+		},
+		{
+			name:          "Empty folder name",
+			folderName:    "",
+			expectedError: fmt.Errorf("Field title must be set!"),
+		},
+		{
+			name:              "Folder name is too long",
+			folderName:        "FolderNameIsSuperLongSoLongItShouldBeTruncated",
+			expectedLength:    40,
+			expectedUidPrefix: "FolderNameIsSuperLongSoLongItShoul",
+			expectedError:     nil,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			folderUid, err := client.generateGrafanaFolder(tc.folderName)
+			if tc.expectedError != nil {
+				assert.Error(t, err, "Expected error but got none")
+				assert.EqualError(t, err, tc.expectedError.Error(), "Unexpected error message")
+				return
+			} else {
+				assert.NoError(t, err, "Unexpected error generating grafana folder: %v", err)
+				assert.Len(t, folderUid, tc.expectedLength, "Folder UID length mismatch, expected %d, got %v", tc.expectedLength, folderUid)
+				assert.True(t, strings.HasPrefix(folderUid, tc.expectedUidPrefix), "Incorrect folder name, expected prefix %s, got %s", tc.expectedUidPrefix, folderUid)
+				client.DeleteFolders([]string{folderUid})
 			}
 		})
 	}
