@@ -540,3 +540,13 @@ func (l *LogzioGrafanaAlertsClient) generateGrafanaFolder(folderTitle string) (s
 	}
 	return grafanaFolder.Uid, nil
 }
+
+// DeleteFolders deletes the specified folders by their UIDs.
+func (l *LogzioGrafanaAlertsClient) DeleteFolders(uids []string) {
+	for _, uid := range uids {
+		err := l.logzioFolderClient.DeleteGrafanaFolder(uid)
+		if err != nil {
+			klog.Warningf("Error deleting folder: %s - %s", uid, err.Error())
+		}
+	}
+}
