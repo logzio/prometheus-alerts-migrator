@@ -530,11 +530,9 @@ func (l *LogzioGrafanaAlertsClient) FindOrCreatePrometheusAlertsFolder() (string
 // generateGrafanaFolder creates a Grafana folder with a unique UID based on the provided title.
 func (l *LogzioGrafanaAlertsClient) generateGrafanaFolder(folderTitle string) (*grafanafolders.GrafanaFolder, error) {
 	maxTitleNameInId := maxFolderNameLength - (randomStringLength + 1) // +1 for the hyphen
-	var uidPrefix string
+	uidPrefix := folderTitle
 	if len(folderTitle) > maxTitleNameInId {
 		uidPrefix = folderTitle[:maxTitleNameInId]
-	} else {
-		uidPrefix = folderTitle
 	}
 	uid := fmt.Sprintf("%s-%s", uidPrefix, common.GenerateRandomString(randomStringLength))
 
