@@ -520,25 +520,30 @@ func (l *LogzioGrafanaAlertsClient) FindOrCreatePrometheusAlertsFolder() (string
 		}
 	}
 	// if not found, create the prometheus alerts folder
-	return l.generateGrafanaFolder(envFolderTitle)
+	newFolder, err := l.generateGrafanaFolder(envFolderTitle)
+	if err != nil {
+		return "", err
+	}
+	return newFolder.Uid, nil
 }
 
 // generateGrafanaFolder creates a Grafana folder with a unique UID based on the provided title.
-func (l *LogzioGrafanaAlertsClient) generateGrafanaFolder(folderTitle string) (string, error) {
+func (l *LogzioGrafanaAlertsClient) generateGrafanaFolder(folderTitle string) (*grafanafolders.GrafanaFolder, error) {
 	maxTitleNameInId := maxFolderNameLength - (randomStringLength + 1) // +1 for the hyphen
+	uidPrefix := folderTitle
 	if len(folderTitle) > maxTitleNameInId {
-		folderTitle = folderTitle[:maxTitleNameInId]
+		uidPrefix = folderTitle[:maxTitleNameInId]
 	}
-	uid := fmt.Sprintf("%s-%s", folderTitle, common.GenerateRandomString(randomStringLength))
+	uid := fmt.Sprintf("%s-%s", uidPrefix, common.GenerateRandomString(randomStringLength))
 
 	grafanaFolder, err := l.logzioFolderClient.CreateGrafanaFolder(grafanafolders.CreateUpdateFolder{
 		Uid:   uid,
 		Title: folderTitle,
 	})
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return grafanaFolder.Uid, nil
+	return grafanaFolder, nil
 }
 
 // DeleteFolders deletes the specified folders by their UIDs.

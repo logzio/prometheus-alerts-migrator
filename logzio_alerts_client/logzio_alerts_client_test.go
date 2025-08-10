@@ -215,16 +215,17 @@ func TestGenerateGrafanaFolder(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			folderUid, err := client.generateGrafanaFolder(tc.folderName)
+			newFolder, err := client.generateGrafanaFolder(tc.folderName)
 			if tc.expectedError != nil {
 				assert.Error(t, err, "Expected error but got none")
 				assert.EqualError(t, err, tc.expectedError.Error(), "Unexpected error message")
 				return
 			} else {
 				assert.NoError(t, err, "Unexpected error generating grafana folder: %v", err)
-				assert.Len(t, folderUid, tc.expectedLength, "Folder UID length mismatch, expected %d, got %v", tc.expectedLength, folderUid)
-				assert.True(t, strings.HasPrefix(folderUid, tc.expectedUidPrefix), "Incorrect folder name, expected prefix %s, got %s", tc.expectedUidPrefix, folderUid)
-				client.DeleteFolders([]string{folderUid})
+				assert.Len(t, newFolder.Uid, tc.expectedLength, "Folder UID length mismatch, expected %d, got %v", tc.expectedLength, newFolder.Uid)
+				assert.True(t, strings.HasPrefix(newFolder.Uid, tc.expectedUidPrefix), "Incorrect folder uid, expected prefix %s, got %s", tc.expectedUidPrefix, newFolder.Uid)
+				assert.Equal(t, newFolder.Title, tc.folderName, "Folder name should match the used test case name")
+				client.DeleteFolders([]string{newFolder.Uid})
 			}
 		})
 	}

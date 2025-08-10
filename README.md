@@ -168,6 +168,8 @@ data:
 
 
 ## Changelog
+- v1.3.2
+  - Fix folder name to not get truncated when name is longer than 40 characters.
 - v1.3.1
   - Enforce a 40-character limit on the auto-generated Grafana folder UIDs to prevent runtime exceptions when the generated UID is too long.
 - v1.3.0
