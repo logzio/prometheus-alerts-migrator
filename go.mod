@@ -6,7 +6,7 @@ require (
 	github.com/logzio/logzio_terraform_client v1.23.2
 	github.com/prometheus/alertmanager v0.28.1
 	github.com/prometheus/common v0.62.0
-	github.com/prometheus/prometheus v0.302.1
+	github.com/prometheus/prometheus v0.311.3
 	github.com/stretchr/testify v1.10.0
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.32.2
